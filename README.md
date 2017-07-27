@@ -1,6 +1,6 @@
 <p align="center"><img src="https://user-images.githubusercontent.com/13636609/28245625-6356a0c2-6a35-11e7-8052-a936c1c928f2.png" width="50%"/></p>
 
-Developed by BioTuring, <i>hera</i> is a bioinformatics tool that helps analyze RNA-seq data. With a single command line, <i>hera</i> provides: 
+Developed by BioTuring (www.bioturing.com), <i>hera</i> is a bioinformatics tool that helps analyze RNA-seq data. With a single command line, <i>hera</i> provides: 
 
 - Base-to-base alignment BAM file
 - Transcript abundance estimation
