@@ -117,6 +117,9 @@ In order to detect fusions, <i>hera</i> keeps track of abnormally mapped reads. 
     -w [Output bam file 0: true, 1: false] (defaut: 0)
     -f [Genome fasta file]
    ```
+  
+  Eg: hera quant -i index/ -t 32 read1.fastq read2.fastq
+  
   1. <b>Index directory</b>: Directory contain index file from previous index step
   
   2. <b>Genome fasta file</b>: If not defined, genome mapping will be ignore. Mapping on transcriptome need ~8BG, but mapping with genome need ~30GB.
