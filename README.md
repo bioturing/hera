@@ -1,12 +1,13 @@
 <p align="center"><img src="https://user-images.githubusercontent.com/13636609/28245625-6356a0c2-6a35-11e7-8052-a936c1c928f2.png" width="50%"/></p>
 
-Developed by BioTuring, <i>hera</i> is a bioinformatic tool that helps analyze RNA-seq data. With a single command line, <i>hera</i> provides: 
+Developed by BioTuring, <i>hera</i> is a bioinformatics tool that helps analyze RNA-seq data. With a single command line, <i>hera</i> provides: 
 
 - Base-to-base alignment BAM file
 - Transcript abundance estimation
 - Fusion gene detection with fused sequence assemblies 
 
-Each process in <i>hera</i> was carefully organized and optimized in order to maximize the performance in term of time and accuracy.
+Each process in <i>hera</i> was carefully organized and optimized in order to maximize the performance in term of time and accuracy. Hera quantification algorithm obtained the best ranking in a recent round of the SMC-RNA DREAM challenge: https://www.synapse.org/#!Synapse:syn2813589/wiki/423306 
+
 
 # Example data
 We designed a test using 20 datasets from Synapse Dream Challenge SMC-RNA, each of which contains 60 million read pairs. The test was done on a 32-core machine running Ubuntu 14.04. The result is shown in the table below:
