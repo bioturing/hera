@@ -9,7 +9,7 @@ Developed by BioTuring, <i>hera</i> is a bioinformatic tool that helps analyze R
 Each process in <i>hera</i> was carefully organized and optimized in order to maximize the performance in term of time and accuracy.
 
 # Example data
-We designed a test using 20 datasets from Synapse Dream Challenge SMC-RNA, each of which contains 30-60 million read pairs. The test was done on a 32-core machine running Ubuntu 14.04. The result is shown in the table below:
+We designed a test using 20 datasets from Synapse Dream Challenge SMC-RNA, each of which contains 60 million read pairs. The test was done on a 32-core machine running Ubuntu 14.04. The result is shown in the table below:
 
 <table width="100%">
    <tr>
