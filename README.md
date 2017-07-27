@@ -103,7 +103,7 @@ In order to detect fusions, <i>hera</i> keeps track of abnormally mapped reads. 
           --full_index
   ```
   
- By default, <i>hera</i> need ~8GB for transcriptome indexing only. Full genome indexing needs ~30GB. You also can download indexed human genome file here: [GRCh37.75](http://static.bioturing.com/hera_index/GRCh37.75.index.tar.bz2), [GRCh38.82](http://static.bioturing.com/hera_index/GRCh38.82.index.tar.bz2) 
+ By default, <i>hera</i> needs ~8GB for transcriptome indexing only. Full genome indexing needs ~30GB. You also can download indexed human genome file here: [GRCh37.75](http://static.bioturing.com/hera_index/GRCh37.75.index.tar.bz2), [GRCh38.82](http://static.bioturing.com/hera_index/GRCh38.82.index.tar.bz2) 
 
 ### RUN:
   ```
@@ -122,7 +122,7 @@ In order to detect fusions, <i>hera</i> keeps track of abnormally mapped reads. 
   
   1. <b>Index directory</b>: Directory contain index file from previous index step
   
-  2. <b>Genome fasta file</b>: If not defined, genome mapping will be ignore. Mapping on transcriptome need ~8BG, but mapping with genome need ~30GB.
+  2. <b>Genome fasta file</b>: If not defined, genome mapping will be ignore. Mapping on transcriptome needs ~8BG, but mapping with genome needs ~30GB.
   
   3. Output file include:
   - abundance.tsv  : Transcripts abundance estimation (tsv file)
