@@ -85,7 +85,7 @@ In order to detect fusions, <i>hera</i> keeps track of abnormally mapped reads. 
 # Install:
 
   ```shell
-  1. git clone https://github.com/kspham/hera.git
+  1. git clone https://github.com/bioturing/hera.git
   2. cd hera/
   3. chmod +x build.sh
   4. ./build.sh
