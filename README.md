@@ -81,6 +81,9 @@ In order to detect fusions, <i>hera</i> keeps track of abnormally mapped reads. 
  
   * GNU GCC C Compiler
   * CMake (http://www.cmake.org/) version 3.1.0 or newer
+  * liblzma-dev (Ubuntu) or xz-devel (Centos, Fedora, Red Hat) or xz (MacOS)
+  * libbz2-dev (Ubuntu) or bzip2-devel.x86_64 (Centos, Fedora, Red Hat) or bzip2 (MacOS)
+  * libz-dev (Ubuntu) or zlib-devel.x86_64 (Centos, Fedora, Red Hat) or zlib (MacOS)
 
 # Install:
 
