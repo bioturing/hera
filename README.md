@@ -1,15 +1,16 @@
 <p align="center"><img src="https://user-images.githubusercontent.com/13636609/28245625-6356a0c2-6a35-11e7-8052-a936c1c928f2.png" width="50%"/></p>
 
-Developed by BioTuring, <i>hera</i> is a bioinformatic tool that helps analyze RNA-seq data. With a single command line, <i>hera</i> provides: 
+Developed by BioTuring (www.bioturing.com), <i>hera</i> is a bioinformatics tool that helps analyze RNA-seq data. With a single command line, <i>hera</i> provides: 
 
 - Base-to-base alignment BAM file
 - Transcript abundance estimation
 - Fusion gene detection with fused sequence assemblies 
 
-Each process in <i>hera</i> was carefully organized and optimized in order to maximize the performance in term of time and accuracy.
+Each process in <i>hera</i> was carefully organized and optimized in order to maximize the performance in term of time and accuracy. Hera quantification algorithm obtained the best ranking in a recent round of the SMC-RNA DREAM challenge: https://www.synapse.org/#!Synapse:syn2813589/wiki/423306 
+
 
 # Example data
-We designed a test for 20 datasets, each of which contains approximately 60 million read pairs. All the reads were simulated after the NA12716_7 sample using <i>rsem-simulated-reads</i>. The test was done on a 32-core machine running Ubuntu 14.04. The result is shown in the table below:
+We designed a test using 20 datasets from Synapse Dream Challenge SMC-RNA, each of which contains 60 million read pairs. The test was done on a 32-core machine running Ubuntu 14.04. The result is shown in the table below:
 
 <table width="100%">
    <tr>
@@ -80,11 +81,14 @@ In order to detect fusions, <i>hera</i> keeps track of abnormally mapped reads. 
  
   * GNU GCC C Compiler
   * CMake (http://www.cmake.org/) version 3.1.0 or newer
+  * liblzma-dev (Ubuntu) or xz-devel (Centos, Fedora, Red Hat) or xz (MacOS)
+  * libbz2-dev (Ubuntu) or bzip2-devel.x86_64 (Centos, Fedora, Red Hat) or bzip2 (MacOS)
+  * libz-dev (Ubuntu) or zlib-devel.x86_64 (Centos, Fedora, Red Hat) or zlib (MacOS)
 
 # Install:
 
   ```shell
-  1. git clone https://github.com/kspham/hera.git
+  1. git clone https://github.com/bioturing/hera.git
   2. cd hera/
   3. chmod +x build.sh
   4. ./build.sh
@@ -102,7 +106,7 @@ In order to detect fusions, <i>hera</i> keeps track of abnormally mapped reads. 
           --full_index
   ```
   
- By default, <i>hera</i> need ~8GB for transcriptome indexing only. Full genome indexing needs ~30GB. You also can download indexed human genome file here: [GRCh37.75](http://static.bioturing.com/hera_index/GRCh37.75.index.tar.bz2), [GRCh38.82](http://static.bioturing.com/hera_index/GRCh38.82.index.tar.bz2) 
+ By default, <i>hera</i> needs ~8GB for transcriptome indexing only. Full genome indexing needs ~30GB. You also can download indexed human genome file here: [GRCh37.75](http://static.bioturing.com/hera_index/GRCh37.75.index.tar.bz2), [GRCh38.82](http://static.bioturing.com/hera_index/GRCh38.82.index.tar.bz2) 
 
 ### RUN:
   ```
@@ -116,9 +120,12 @@ In order to detect fusions, <i>hera</i> keeps track of abnormally mapped reads. 
     -w [Output bam file 0: true, 1: false] (defaut: 0)
     -f [Genome fasta file]
    ```
+  
+  Eg: hera quant -i index/ -t 32 read1.fastq read2.fastq
+  
   1. <b>Index directory</b>: Directory contain index file from previous index step
   
-  2. <b>Genome fasta file</b>: If not defined, genome mapping will be ignore. Mapping on transcriptome need ~8BG, but mapping with genome need ~30GB.
+  2. <b>Genome fasta file</b>: If not defined, genome mapping will be ignore. Mapping on transcriptome needs ~8BG, but mapping with genome needs ~30GB.
   
   3. Output file include:
   - abundance.tsv  : Transcripts abundance estimation (tsv file)
@@ -138,6 +145,10 @@ In order to detect fusions, <i>hera</i> keeps track of abnormally mapped reads. 
 # Contacts
 
 Please report any issues directly to the github issue tracker. Also, you can send your feedback to hera.rnaseq@gmail.com
+
+# Contributions
+BioTuring Algorithm Team & 
+Thao Truong, Khoa Nguyen, Tuan Tran, and Son Pham
 
 # License
 

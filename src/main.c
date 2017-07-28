@@ -136,6 +136,7 @@ void quantility(int argc, char *argv[]) {
 }
 
 int main(int argc, char *argv[]) {
+	printf("Hera is a program developed by BioTuring for RNA-Seq analysis.\nPlease contact info@bioturing.com if you need further support\n");
 	if (argc < 3)
 		print_usage();
 	else if (strcmp(argv[1], "index") == 0) {
