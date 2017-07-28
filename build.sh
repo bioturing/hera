@@ -114,6 +114,17 @@ echo "Build lib finish"
 cd ../../
 buildir=`pwd`
 echo "Build HERA at $buildir"
-make
-echo "SUCCESS"
 
+UNAME=`uname`
+
+Makefile_mac="Makefile_mac"
+Makefile_linux="Makefile_linux"
+
+if [ $UNAME == "Darwin" ]
+then
+	echo "Mac"
+	make -f $Makefile_mac
+else
+	echo "Linux"
+	make -f $Makefile_linux
+fi
