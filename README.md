@@ -48,7 +48,7 @@ We designed a test using 20 datasets from Synapse Dream Challenge SMC-RNA, each 
       <td align="center">0.9951 </td>
   </tr>
   <tr>
-  <td colspan="3" align="center"> <b>Gene fusion in compare with truth</b> </td>
+  <td colspan="3" align="center"> <b>Gene fusion result in comparision with truth</b> </td>
   </tr>
   <tr>
       <td align="center">True positive</td>
