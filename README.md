@@ -130,7 +130,7 @@ In order to detect fusions, <i>hera</i> keeps track of abnormally mapped reads. 
   3. Output file include:
   - abundance.tsv  : Transcripts abundance estimation (tsv file)
   - abundance.h5   : Transcripts abundance estimation and boostrapping result (hdf5 file)
-  - fusion.bedpe   : Fusion detection result
+  - fusion.bedpe   : Fusion detection result (for paired-end data only)
   - transcript.bam : Alignment result
 
 # Third-party
