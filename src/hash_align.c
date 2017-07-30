@@ -1240,7 +1240,7 @@ void load_index(char *idx_dir, char *genome)
 	FILE *input = fopen(file_path, "rb");
 
 	if (!input) {
- 		fprintf(stdout, "Can not open index file or file is not exist!!!\n");
+ 		fprintf(stdout, "Can not open index file or file does not exist!!!\n");
  		exit(EXIT_FAILURE);
  	}
 
