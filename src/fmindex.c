@@ -166,7 +166,7 @@ FMindex *load_FMindex(char *index_file, unsigned int l, char *genome)
 	saidx = fopen(index_file, "rb");
 
 	if (!index || !saidx){
-		printf("Can not open genome file or file is not exist. You should run index command with option --full-index\n");
+		printf("Can not open genome file or file does not exist. You should run index command with option --full-index\n");
 		exit(EXIT_FAILURE);
 	}
 
