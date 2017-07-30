@@ -126,14 +126,14 @@ def write_index(total_byte, gene_info):
 	for chr in CHROMOSOME:
 		maxNameLen = max(maxNameLen, len(chr))
 		fi.write(struct.pack("I", len(chr)))
-		fi.write(chr)
+		fi.write(chr.encode())
 		fi.write(struct.pack("I", len(GENOME[chr]["seq"])))
 
 	fi.write(struct.pack("II", len(CHROMOSOME), maxNameLen + 1))
 
 	for chr in CHROMOSOME:
-		fi.write(chr)
-		fi.write('\0'*(maxNameLen - len(chr) + 1))
+		fi.write(chr.encode())
+		fi.write(('\0'*(maxNameLen - len(chr) + 1)).encode())
 	for chr in CHROMOSOME:
 		fi.write(struct.pack("I", len(GENOME[chr]["seq"])))
 
@@ -144,8 +144,8 @@ def write_index(total_byte, gene_info):
 
 	fi.write(struct.pack("II", len(gene_info), maxNameLen + 1))
 	for gene in gene_info:
-		fi.write(gene)
-		fi.write('\0'*(maxNameLen - len(gene) + 1))
+		fi.write(gene.encode())
+		fi.write(('\0'*(maxNameLen - len(gene) + 1)).encode())
 
 	# Consecutively write transcript info for each gene
 	# [number of exon, [consecutive exon start], [consecutive exon end]]
