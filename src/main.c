@@ -36,7 +36,7 @@ void index_ref(char *transcriptome, char *genome, char *out_file, int full)
 	get_ref_seq(transcriptome);
 
 	// Write to file
-	DEBUG_PRINT("Number of sequence\t: %u\n", REF_INF->n);
+	DEBUG_PRINT("Number of sequences\t: %u\n", REF_INF->n);
 	write_to_file(out_file);
 
 	// Index genome 
@@ -54,7 +54,7 @@ void quantility(int argc, char *argv[]) {
 	unsigned long i_start = 0;
 
 	// Get parameter
-	while ((c = getopt(argc, argv, "t:i:o:b:z:h:w:f:")) != -1) {
+	while ((c = getopt(argc - 1, argv + 1, "t:i:o:b:z:h:w:f:")) != -1) {
 		switch (c) {
 			case 't':
 				temp_nthread = atoi(optarg);
