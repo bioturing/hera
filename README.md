@@ -94,6 +94,13 @@ In order to detect fusions, <i>hera</i> keeps track of abnormally mapped reads. 
   4. ./build.sh
   ```
 
+  For Linux users, <i> hera </i> can be easily installed by using <b>bioconda</b> as following commands:
+  
+  ```shell
+  conda config --add channels bioconda
+  conda install hera
+  ```
+
 # Usage:
 
 ### INDEX:
