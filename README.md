@@ -110,7 +110,7 @@ In order to detect fusions, <i>hera</i> keeps track of abnormally mapped reads. 
           --gtf annotation_file.gtf
           --outdir path/to/output_directory
  [OPTIONAL]
-          --full_index
+          --full_index 0: None, 1: index full genome
   ```
   
  By default, <i>hera</i> needs ~8GB for transcriptome indexing only. Full genome indexing needs ~30GB. You also can download indexed human genome file here: [GRCh37.75](http://static.bioturing.com/hera_index/GRCh37.75.index.tar.bz2), [GRCh38.82](http://static.bioturing.com/hera_index/GRCh38.82.index.tar.bz2) 
