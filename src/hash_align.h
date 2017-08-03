@@ -42,7 +42,7 @@
 KSEQ_INIT(gzFile, gzread)
 #endif
 
-#define VERSION "hera-v1.0\0"
+#define VERSION "hera-v1.0.1\0"
 
 #define ALPHABET "ACGT"
 #define BLOCK 32
