@@ -48,7 +48,7 @@ void index_ref(char *transcriptome, char *genome, char *out_file, int full)
 }
 
 void quantility(int argc, char *argv[]) {
-	char *idx_dir, *out_dir = "./", *genome = NULL, *prefix = '\0';
+	char *idx_dir, *out_dir = "./", *genome = NULL, *prefix = "\0";
 	EM_val *em_val;
 	int c, temp_nthread, temp_writebam, temp_nbs;
 	unsigned int n_bs = 0;
