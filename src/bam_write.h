@@ -30,7 +30,8 @@ typedef struct {
 extern unsigned int BUFF_LEN;
 extern char *BAM_BUF;
 
-void init_output(char *idx_dir, char *out_dir, int argc, char *argv[]);
+void init_output(char *idx_dir, char *out_dir, int argc,
+				      char *argv[], char *prefix);
 void bam_write_pair(Read_inf read1, Read_inf read2, Candidate *r,
 	unsigned int proper, unsigned int first, unsigned int rev,
 	     unsigned int mrev, char *stream, unsigned int *slen);

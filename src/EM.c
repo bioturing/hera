@@ -175,23 +175,30 @@ void write_fusion()
 	pthread_attr_destroy(&attr);
 }
 
-void write_result(char *out_dir, unsigned int n_bs, EM_val *em_val)
+void write_result(char *out_dir, unsigned int n_bs,
+			 EM_val *em_val, char *prefix)
 {
-	unsigned int i, k, l, v, g;
+	unsigned int i, k, l, v, g, p_len;
 	float sum[2] = {0.0, 0.0};
 	FILE *out;
 	hid_t file_id, root, aux, bs;
 	herr_t status;
 
 	l = strlen(out_dir);
+	p_len = strlen(prefix);
         char file_path[l + 50];
         v = 1; 
-	if (out_dir[l - 1] == '/')
-		--l;
+	if (out_dir[l - 1] != '/')
+		out_dir[l++]= '/';
 	memcpy(file_path, out_dir, l);
+	memcpy(file_path + l, prefix, p_len);
+	l += p_len;
+
+	if (p_len > 0)
+		memcpy(file_path + l++, "_", 1);
 
 	// Abundance
-	memcpy(file_path + l, "/abundance.tsv\0", 15);
+	memcpy(file_path + l, "abundance.tsv\0", 14);
 	out = fopen(file_path, "w");
 
 	fprintf(out, "#target_id\tunique_map\tlength\teff_length\test_counts\ttpm\n");
@@ -204,9 +211,9 @@ void write_result(char *out_dir, unsigned int n_bs, EM_val *em_val)
 	fclose(out);
 
 	// Genome abundance TODO: Estimate directly from read count
-	memcpy(file_path + l, "/abundance.gene.tsv\0", 20);
+	memcpy(file_path + l, "abundance.gene.tsv\0", 19);
 	out = fopen(file_path, "w");
-	fprintf(out, "#gene_id\tgene_name\tlength\test_counts\ttpm\n");
+	fprintf(out, "#gene_id\tgene_name\test_counts\ttpm\n");
 	for (i = 0; i < REF_INF->n; ++i){
 		g = GENE_MAP->gene[i];
 		sum[0] = em_val->overlap[i];
@@ -218,21 +225,21 @@ void write_result(char *out_dir, unsigned int n_bs, EM_val *em_val)
 		}
 		fprintf(out, "%s\t%s\t%f\t%f\n",
 			REF_INF->ref_name + i*REF_INF->name_len + 16,
-				GENE_MAP->gene_name + g*GENE_MAP->l_gene + 16,
-							      sum[0], sum[1]);
+			GENE_MAP->gene_name + g*GENE_MAP->l_gene + 16,
+						      sum[0], sum[1]);
 	}
 	fclose(out);
 
 	// Fusion
 	if (FUSION->n > 0){
-		memcpy(file_path + l, "/fusion.bedpe\0", 14);
+		memcpy(file_path + l, "fusion.bedpe\0", 13);
 		OUT_FUSION = fopen(file_path, "w");
 		write_fusion();
 	}
 
 	// HDF5
 	if (n_bs > 0) {
-		memcpy(file_path + l, "/abundance.h5\0", 14);
+		memcpy(file_path + l, "abundance.h5\0", 13);
 		file_id = H5Fcreate(file_path, H5F_ACC_TRUNC,
 							H5P_DEFAULT, H5P_DEFAULT);
 		root = H5Gopen(file_id, "/", H5P_DEFAULT);
@@ -341,11 +348,12 @@ void E_step(unsigned int *count, EM_val *em_val)
 
 EM_val *estimate_count(unsigned int *count, unsigned int order)
 {
-	DEBUG_PRINT("Running EM ...");
+	printf("Running EM ...\n");
 	fflush(stdout);
 
 	unsigned int i, k, stop, minRound, maxRound;
-	double *u, *u1, *u2, sum, error, alpha, r[REF_INF->n], v[REF_INF->n];
+	double *u, *u1, *u2, sum, error, alpha, n_v, n_r;
+	double r[REF_INF->n], v[REF_INF->n];
 	EM_val *em_val = malloc(sizeof (EM_val));
 
 	E_step(count, em_val);
@@ -364,7 +372,13 @@ EM_val *estimate_count(unsigned int *count, unsigned int order)
 			v[i] = (u2[i] - u1[i]) - r[i];
 		}
 
-		alpha = -Norm(r, REF_INF->n) / Norm(v, REF_INF->n);
+		n_r = Norm(r, REF_INF->n);
+		n_v = Norm(v, REF_INF->n);
+
+		if (n_v != 0)
+			alpha = -n_r/n_v;
+		else
+			alpha = -1;
 
 		if (alpha > -1) alpha = -1;
 		free(u2);
@@ -377,8 +391,6 @@ EM_val *estimate_count(unsigned int *count, unsigned int order)
 		em_val->grama = u1;
 		M_step(em_val, count, &stop);
 
-		DEBUG_PRINT("\rRunning EM ...%u round", k);
-		fflush(stdout);
 		free(u);
 		free(u1);
 		++k;
@@ -387,16 +399,21 @@ EM_val *estimate_count(unsigned int *count, unsigned int order)
 	for (i = 0, sum = 0.0; i < REF_INF->n; ++i)
 		sum += em_val->grama[i];
 
-	for (i = 0; i < REF_INF->n; ++i) {
-		em_val->overlap[i] = em_val->grama[i] * REF_INF->len[i];
-		em_val->grama[i] = em_val->grama[i]*1000000 / sum;
+	if (sum == 0){
+		memset(em_val->overlap, 0, REF_INF->n * sizeof(double));
+		memset(em_val->grama, 0, REF_INF->n * sizeof(double));
+	} else {
+		for (i = 0; i < REF_INF->n; ++i) {
+			em_val->overlap[i] = em_val->grama[i] * REF_INF->len[i];
+			em_val->grama[i] = em_val->grama[i]*1000000 / sum;
+		}
 	}
 
 	if (order == 0)
-		DEBUG_PRINT("\rFinish EM with %u rounds\n", k);
+		printf("Finish EM with %u rounds\n", k);
 	else
-		DEBUG_PRINT("\rFinish bootstrap number %u with %u rounds",
-                                                                 order, k);
+		printf("Finish bootstrap number %u with %u rounds",
+                                                	 order, k);
 
 	return em_val;
 }

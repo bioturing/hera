@@ -2041,7 +2041,7 @@ void get_alignment_pair(char *fq1, char *fq2)
 				}
 
 				if (n_read % 100000 == 0){
-					DEBUG_PRINT("\t\rNumber of processed pairs\t: %u", n_read);
+					printf("\t\rNumber of processed pairs\t: %u", n_read);
 					fflush(stdout);
 				}
 			}
@@ -2071,9 +2071,9 @@ void get_alignment_pair(char *fq1, char *fq2)
 			REF_INF->eff_len[i] = REF_INF->len[i] - MEAN_FRAG + 1;
 	}
 
-	DEBUG_PRINT("\rNumber of aligned pairs\t: %u/%u\n", MAPPED, n_read);
-	DEBUG_PRINT("Mean read length\t: %f\n", MEAN_LEN);
-	DEBUG_PRINT("Mean fragment length\t: %f\n", MEAN_FRAG);
+	printf("\rNumber of aligned pairs\t: %u/%u\n", MAPPED, n_read);
+	printf("Mean read length\t: %f\n", MEAN_LEN);
+	printf("Mean fragment length\t: %f\n", MEAN_FRAG);
 
 	fprintf(SUMMARY, "\nMAPPING RESULT:\n");
 	fprintf(SUMMARY, "\tTotal number of read pairs\t\t\t: %u\n", n_read);
@@ -2118,7 +2118,7 @@ void get_alignment(char *fq)
 				++n_read;
 				MEAN_LEN += l;
 				if (n_read % 100000 == 0){
-					DEBUG_PRINT("\t\rNumber of processed reads\t: %u", n_read);
+					printf("\t\rNumber of processed reads\t: %u", n_read);
 					fflush(stdout);
 				}
 
@@ -2156,8 +2156,8 @@ void get_alignment(char *fq)
 		else
 			REF_INF->eff_len[i] = REF_INF->len[i] - MEAN_FRAG + 1;
 	}
-	DEBUG_PRINT("\rNumber of aligned reads\t: %u/%u\n", PAIRED, n_read);
-	DEBUG_PRINT("Mean read lenght\t: %f\n", MEAN_LEN);
+	printf("\rNumber of aligned reads\t: %u/%u\n", PAIRED, n_read);
+	printf("Mean read lenght\t: %f\n", MEAN_LEN);
 
 	fprintf(SUMMARY, "\nMAPPING RESULT:\n");
 	fprintf(SUMMARY, "\tTotal number of reads\t\t\t: %u\n", n_read);

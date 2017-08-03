@@ -11,6 +11,7 @@ void print_usage()
 	fprintf(stdout, "\t\t-b:\t Number of bootstraps (default: 0)\n");
 	fprintf(stdout, "\t\t-w:\t Output bam file 0:true, 1: false (default: 0)\n");
 	fprintf(stdout, "\t\t-f:\t Genome fasta file (if not define, genome mapping will be ignore\n");
+	fprintf(stdout, "\t\t-p:\t Output prefix (default: '')\n");
 	exit(EXIT_FAILURE);
 }
 
@@ -32,29 +33,29 @@ void index_ref(char *transcriptome, char *genome, char *out_file, int full)
 	init_hash();
 
 	//Read reference sequence + construct hash for transcriptome    
-	DEBUG_PRINT("Index transcripts in: %s\n", transcriptome);
+	printf("Index transcripts in: %s\n", transcriptome);
 	get_ref_seq(transcriptome);
 
 	// Write to file
-	DEBUG_PRINT("Number of sequences\t: %u\n", REF_INF->n);
+	printf("Number of sequences\t: %u\n", REF_INF->n);
 	write_to_file(out_file);
 
 	// Index genome 
 	if (full == 1){
-		DEBUG_PRINT("Index genome in: %s\n", genome);
+		printf("Index genome in: %s\n", genome);
 		indexGenome(genome, out_file);
 	}
 }
 
 void quantility(int argc, char *argv[]) {
-	char *idx_dir, *out_dir = "./", *genome = NULL;
+	char *idx_dir, *out_dir = "./", *genome = NULL, *prefix = '\0';
 	EM_val *em_val;
 	int c, temp_nthread, temp_writebam, temp_nbs;
 	unsigned int n_bs = 0;
 	unsigned long i_start = 0;
 
 	// Get parameter
-	while ((c = getopt(argc - 1, argv + 1, "t:i:o:b:z:h:w:f:")) != -1) {
+	while ((c = getopt(argc - 1, argv + 1, "t:i:o:b:z:h:w:f:p:")) != -1) {
 		switch (c) {
 			case 't':
 				temp_nthread = atoi(optarg);
@@ -74,6 +75,9 @@ void quantility(int argc, char *argv[]) {
 				break;
 			case 'i':
 				idx_dir = optarg;
+				break;
+			case 'p':
+				prefix = optarg;
 				break;
 			case 'f':
 				genome = optarg;
@@ -110,7 +114,7 @@ void quantility(int argc, char *argv[]) {
 	init_refInf();
 	init_hash();
 	load_index(idx_dir, genome);
-	init_output(idx_dir, out_dir, argc, argv);
+	init_output(idx_dir, out_dir, argc, argv, prefix);
 
 	//Get alignment
 	if (optind + 2 < argc) {
@@ -119,7 +123,7 @@ void quantility(int argc, char *argv[]) {
 		get_alignment_pair(argv[optind + 1], argv[optind + 2]);
 	} else {
 		DEBUG_PRINT("Process single-end reads in: %s\n",
-							       argv[optind + 1]);
+							argv[optind + 1]);
 		get_alignment(argv[optind + 1]);
 	}
 
@@ -131,7 +135,7 @@ void quantility(int argc, char *argv[]) {
 	em_val = estimate_count(REF_INF->count, 0);
 
 	// Finish
-	write_result(out_dir, n_bs, em_val);
+	write_result(out_dir, n_bs, em_val, prefix);
 	fclose(SUMMARY);
 }
 

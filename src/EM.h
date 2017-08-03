@@ -26,6 +26,7 @@ typedef struct {
 Discrete_dist *DIST;
 
 EM_val *estimate_count(unsigned int *count, unsigned int order);
-void write_result(char *out_dir, unsigned int n_bs, EM_val *em_val);
+void write_result(char *out_dir, unsigned int n_bs,
+				 EM_val *em_val, char *prefix);
 
 #endif

@@ -495,20 +495,28 @@ void read_header(char *idx_dir, int argc, char *argv[])
 	fclose(idx);
 }
 
-void init_output(char *idx_dir, char *out_dir, int argc, char *argv[])
+void init_output(char *idx_dir, char *out_dir, int argc,
+				 char *argv[], char *prefix)
 {
-	unsigned int len;
+	unsigned int len, p_len;
 	char *file_path;
 
 	// Make file path
 	len = strlen(out_dir);
-	if (out_dir[len-1] == '/') --len;
+	if (out_dir[len-1] != '/')
+		--len;
 
-	file_path = malloc(len + 16);
+	p_len = strlen(prefix);
+
+	file_path = malloc(len + p_len + 17);
 	memcpy(file_path, out_dir, len);
 
 	if (WRITE_BAM == 0){
-		memcpy(file_path + len, "/transcript.bam\0", 16);
+		memcpy(file_path + len, "/", 1);
+		memcpy(file_path + len + 1, prefix, p_len);
+		if (p_len > 0)
+			memcpy(file_path + len + 1 + p_len++, "_", 1);
+		memcpy(file_path + len + p_len + 1, "alignment.bam\0", 14);
 		BAM = bam_open(file_path, "wb");
 	}
 	memcpy(file_path + len, "/summary\0", 9);
