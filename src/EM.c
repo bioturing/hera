@@ -348,9 +348,6 @@ void E_step(unsigned int *count, EM_val *em_val)
 
 EM_val *estimate_count(unsigned int *count, unsigned int order)
 {
-	printf("Running EM ...\n");
-	fflush(stdout);
-
 	unsigned int i, k, stop, minRound, maxRound;
 	double *u, *u1, *u2, sum, error, alpha, n_v, n_r;
 	double r[REF_INF->n], v[REF_INF->n];
@@ -412,7 +409,7 @@ EM_val *estimate_count(unsigned int *count, unsigned int order)
 	if (order == 0)
 		printf("Finish EM with %u rounds\n", k);
 	else
-		printf("Finish bootstrap number %u with %u rounds",
+		printf("Finish bootstrap number %u with %u rounds\n",
                                                 	 order, k);
 
 	return em_val;

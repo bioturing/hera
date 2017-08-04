@@ -503,7 +503,7 @@ void init_output(char *idx_dir, char *out_dir, int argc,
 
 	// Make file path
 	len = strlen(out_dir);
-	if (out_dir[len-1] != '/')
+	if (out_dir[len-1] == '/')
 		--len;
 
 	p_len = strlen(prefix);
