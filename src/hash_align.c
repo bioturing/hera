@@ -1230,8 +1230,6 @@ void load_hash(FILE *input)
 void load_index(char *idx_dir, char *genome)
 {
 	unsigned int l = strlen(idx_dir);
-	if (idx_dir[l-1] == '/') --l;
-
 	int ret;
 
 	char file_path[l + 20];
