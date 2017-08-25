@@ -117,8 +117,6 @@ def extract_transcriptome(args):
 def write_index(total_byte, gene_info):
 	print ("Extract transcript sequence")
 	outdir = args.outdir
-	if outdir[-1] != '/':
-		outdir += '/'
 
 	# Store sequence of all transcript
 	f = open(outdir + "transcripts.fasta", "w")
@@ -213,6 +211,8 @@ if str(args.outdir) == "None":
 if str(args.grch38) == "None":
 	args.grch38 = "0"
 
+if args.outdir[-1] != '/':
+	args.outdir += '/'
 total_byte = load_genome(args)
 gene_info = extract_transcriptome(args)
 write_index(total_byte, gene_info)
