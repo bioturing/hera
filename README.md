@@ -111,9 +111,12 @@ In order to detect fusions, <i>hera</i> keeps track of abnormally mapped reads. 
           --outdir path/to/output_directory
  [OPTIONAL]
           --full_index 0: None, 1: index full genome
+          --grch38     0: No, 1: Yes
   ```
   
- By default, <i>hera</i> needs ~8GB for transcriptome indexing only. Full genome indexing needs ~30GB. You also can download indexed human genome file here: [GRCh37.75](https://drive.google.com/file/d/0B8iAyV1a-kmCRzZueVhGaDJuaDA/view), [GRCh38.82](https://drive.google.com/file/d/0ByiG7pl1z3EMT3F3UDBvR1JrR00/view) 
+ By default, <i>hera</i> needs ~8GB for transcriptome indexing only. Full genome indexing needs ~30GB. You also can download indexed human genome file here: [GRCh37.75](https://drive.google.com/file/d/0B8iAyV1a-kmCRzZueVhGaDJuaDA/view), [GRCh38.82](https://drive.google.com/file/d/0ByiG7pl1z3EMT3F3UDBvR1JrR00/view)
+ 
+ If you are running with GRCh38 human genome included ALT contigs, you should let hera know by defining --grch38 1.
 
 ### RUN:
   ```
