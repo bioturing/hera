@@ -1,14 +1,13 @@
 #!/usr/bin/env python
 
 import sys
-import os
 import argparse
 import subprocess
 import struct
 
 # Global variant
-# GENOME: {
-#	chr_name: {
+# GENOME: { 
+#	chr_name: { 
 #		seq: string,
 #		order: integer,
 #		gene_id: {
@@ -19,16 +18,19 @@ import struct
 #}
 GENOME = {}
 CHROMOSOME = []
+N_REF = 25
 INTEGER = 4 # Byte
 
 def get_argument():
-	parser = argparse.ArgumentParser(description='Get file path')
-	parser.add_argument('--fasta', help='Input reference genome fasta file')
-	parser.add_argument('--gtf', help='Input reference annotation gtf file')
-	parser.add_argument('--outdir', help='Output directory')
-	parser.add_argument('--full_index', help='Output directory')
+	parser = argparse.ArgumentParser(usage='./hera_build  --fasta FASTA  --gtf GTF  --outdir OUTDIR\n[OPTIONAL]\n\t--full_index 0/1\n\t--grch38 0/1')
+	parser._optionals.title = 'Arguments'
+	parser.add_argument('--fasta', metavar='', help='input reference genome fasta file')
+	parser.add_argument('--gtf', metavar='', help='input reference annotation gtf file')
+	parser.add_argument('--outdir', metavar='', help='output directory')
+	parser.add_argument('--full_index', metavar='', help='0: none, 1: index full genome')
+	parser.add_argument('--grch38', metavar='', help='is input fasta GRCh38? 0: No, 1: Yes')
 
-	return parser.parse_args()
+	return parser
 
 # Load genome sequence from fasta file
 # Extract order and chromosome name for bam header index
@@ -54,8 +56,10 @@ def load_genome(args):
 				order += 1
 			else:
 				seq += line[:-1]
+				if args.grch38 == "1" and order >= N_REF:
+					break
 		GENOME[name] = {"seq" : seq, "order" : order - 1}
-
+		
 		# 1 integer for name length
 		# 1 integer for sequence length
 		total += len(name) + 2*INTEGER*order
@@ -93,7 +97,7 @@ def extract_transcriptome(args):
 					if k[0] == "gene_id" or k[0] == "transcript_id":
 						transcript_inf[k[0]] = k[1]
 				try:
-					GENOME[line[0]][transcript_inf["gene_id"]][transcript_inf["transcript_id"]] = []
+					GENOME[line[0]][transcript_inf["gene_id"]][transcript_inf["transcript_id"]] = [] 
 				except:
 					continue
 			elif line[2] == "exon":
@@ -113,12 +117,13 @@ def extract_transcriptome(args):
 def write_index(total_byte, gene_info):
 	print ("Extract transcript sequence")
 	outdir = args.outdir
-        if not os.path.exists(outdir):
-                os.makedirs(outdir)
+	if outdir[-1] != '/':
+		outdir += '/'
+
 	# Store sequence of all transcript
-	f = open(os.path.join(outdir, "transcripts.fasta"), "w")
+	f = open(outdir + "transcripts.fasta", "w")
 	# Store index for query
-	fi = open(os.path.join(outdir, "reference.inf"), "wb")
+	fi = open(outdir + "reference.inf", "wb")
 
 	# BAM header [name length, name, sequence length]
 	maxNameLen = 0
@@ -182,14 +187,32 @@ def write_index(total_byte, gene_info):
 			if gene == "seq" or gene == "order":
 				continue
 			for transcript in GENOME[chr][gene]:
-				if transcript == "inf":
+				if transcript == "inf":                                                     
 					continue
 				fi.write(struct.pack("I", GENOME[chr][gene]["inf"]))
 
 	f.close()
 	fi.close()
 
-args = get_argument()
+argument = get_argument()
+args = argument.parse_args()
+
+# Detect missing argument
+if str(args.fasta) == "None":
+	argument.print_help()
+	sys.exit(0)
+
+if str(args.gtf) == "None":
+	argument.print_help()
+	sys.exit(0)
+
+if str(args.outdir) == "None":
+	argument.print_help()
+	sys.exit(0)
+
+if str(args.grch38) == "None":
+	args.grch38 = "0"
+
 total_byte = load_genome(args)
 gene_info = extract_transcriptome(args)
 write_index(total_byte, gene_info)
@@ -199,4 +222,4 @@ path = sys.argv[0].replace("hera_build", "hera")
 full = args.full_index
 if str(full) == "None":
 	full = "0"
-subprocess.call([path , "index", os.path.join(args.outdir, "transcripts.fasta"), args.fasta, os.path.join(args.outdir, "index"), full])
+subprocess.call([path , "index", args.outdir + "transcripts.fasta", args.fasta, args.outdir + "index", full])
