@@ -61,7 +61,7 @@ void g_get_SWalign(Read_inf read, unsigned int **pos, unsigned int id,
 
 	if (p > 0){
 		cigar = SW_align(FMINDEX->seq, ref_start - add, read.seq,
-			p + add, p, &score, p < 2*ERR? -3 : -ERR, &skip, read);
+				p + add, p, &score, p < 2*ERR? -3 : -ERR);
                 err += score; 
 
 		if (err > read.len/2 || err > *max){
@@ -97,7 +97,7 @@ void g_get_SWalign(Read_inf read, unsigned int **pos, unsigned int id,
 		add = (i + 1) < n? 0: ERR;
 		tmp = SW_align(FMINDEX->seq, ref_start + start,
 			        read.seq + start, len, len, &score,
-			     	   len < 2*ERR? 3: ERR, &skip, read);
+				     	      len < 2*ERR? 3: ERR);
 		err += score;
 
 		if (err > read.len/2 || err > *max + 1){

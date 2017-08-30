@@ -52,6 +52,7 @@ KSEQ_INIT(gzFile, gzread)
 #define KMER 31
 #define ERR 7
 #define MIN_FRAG 10
+#define MAX_FRAG 1000
 #define MIL 33554432
 
 #define POP_HEAD(id) ((id << (2 * (BLOCK - KMER + 1))) >> (2 * (BLOCK - KMER)))
@@ -243,7 +244,7 @@ typedef struct {
 
 extern const unsigned int H;
 extern double MEAN_FRAG, MEAN_LEN;
-extern unsigned int NTHREAD, MAX_FRAG, PAIRED, MAPPED, WRITE_BAM, CLASS_MAX, seed;
+extern unsigned int N_READ, NTHREAD, PAIRED, MAPPED, WRITE_BAM, CLASS_MAX, seed;
 extern int COMPRESS_LEVEL;
 extern pthread_mutex_t LOCK;
 extern pthread_rwlock_t LOCK_RW;
@@ -258,6 +259,7 @@ extern FMindex *FMINDEX;
 extern bamFile BAM;
 extern FILE *SUMMARY;
 extern FILE *OUT_FUSION;
+extern kseq_t *R1, *R2;
 
 /* Initialize */
 void init_hash();
@@ -313,7 +315,6 @@ unsigned long reverse(unsigned long kmer);
 char *value_to_key(unsigned long value);
 
 Cigar *SW_align(char *ref, unsigned int rstart, char *str, unsigned int ref_len,
-					unsigned int len, int *score, short err,
-						       int *skip, Read_inf read);
+					unsigned int len, int *score, short err);
 
 #endif

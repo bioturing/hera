@@ -361,7 +361,7 @@ void write_alignment_pair(Read_inf read1, Read_inf read2,
 	pack_bam_core(core[0], r, 0, read1, gene, name_len);
 	pack_bam_core(core[1], r, 1, read2, gene, name_len);
 
-	if (core[0]->ref > 0 && core[0]->ref == core[1]->ref){
+	if (core[0]->ref >= 0 && core[0]->ref == core[1]->ref){
 		if (core[0]->pos < core[1]->pos)
 			size = core[1]->pos + read2.len + core[1]->align_len
 							      - core[0]->pos;

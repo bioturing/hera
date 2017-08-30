@@ -1,4 +1,5 @@
 #include "hash_align.h"
+#include "ssw.h"
 
 unsigned int ascii_table[256] = {
 	4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,
@@ -22,9 +23,9 @@ unsigned int ascii_table[256] = {
 const unsigned int H = (int) 1 << 27;
 unsigned int NTHREAD = 1;
 int COMPRESS_LEVEL = -1;
-unsigned int MAX_FRAG = 0;
 double MEAN_FRAG = 0;
 double MEAN_LEN = 0;
+unsigned int N_READ = 0;
 unsigned int PAIRED = 0;
 unsigned int MAPPED = 0;
 unsigned int WRITE_BAM = 0;
@@ -42,6 +43,7 @@ FMindex *FMINDEX;
 bamFile BAM;
 FILE *SUMMARY;
 FILE *OUT_FUSION;
+kseq_t *R1, *R2;
 
 void hera_write(bamFile bam_file, void *input_buf, unsigned int block_length)
 {
@@ -541,6 +543,9 @@ unsigned int intersect3(unsigned int *pos, unsigned int *p, unsigned int *len,
  ******************************************************************************/
 void add_cigar(Cigar *cigar, char type, unsigned short add, char *c)
 {
+	if (add == 0)
+		return;
+
 	unsigned int n = cigar->n_cigar;
 
 	if (n > 1 && cigar->type[n-1] == SCLIP){
@@ -638,8 +643,7 @@ void free_cigar(Cigar *cigar)
  * @ err   : maximum allowed error (err < 0: query string is read preffix)    *
  ******************************************************************************/
 Cigar *SW_align(char *ref, unsigned int rstart, char *str, unsigned int ref_len,
-					unsigned int len, int *score, short err,
-						       int *skip, Read_inf read)
+					unsigned int len, int *score, short err)
 {
 	int i, k, j, ferr;
 	unsigned int s, pen, min, xmin, add;
@@ -654,17 +658,16 @@ Cigar *SW_align(char *ref, unsigned int rstart, char *str, unsigned int ref_len,
 		reverse2(q, len);
 	}
 
+	s = *score = 0;
 	Cigar *cigar = init_cigar();
-
-	s = *score = *skip = 0;
 	if (len == 0)
 		return cigar;
 
 	for (i = 0; i < len + 1; ++i)
 		memset(matrix[i], 0, (ref_len + 1)*sizeof(short));
 
-	add = ref_len < read.len? 0: ref_len - len;
-	for (i = add; i <= add + error + 1; ++i) matrix[0][i] = i - add;
+	for (i = 0; i <= error + 1; ++i)
+		matrix[0][i] = i;
 
 	for (k = 1, ferr = -1; k <= len; ++k){
 		min = error;
@@ -702,26 +705,15 @@ Cigar *SW_align(char *ref, unsigned int rstart, char *str, unsigned int ref_len,
 			break;
 		}
 
-		while (matrix[k][s] >= error && s < i) ++s;
+		while (matrix[k][s] >= error && s < i)
+			++s;
 		if (j > xmin && j < ref_len)
 			matrix[k][j] = error + 1;
 	}
 
 	--k;
-	for (i = 0; i <= ref_len; ++i){
-		if (matrix[k][i] == min){
-			xmin = i;
-			break;
-		}
-	}
-	if (xmin < len && k == len){
-		min = matrix[k][len];
-		xmin = len;
-	}
-	i = len;
-
-	if (min >= error || (ref_len != len && min*2 > k - ferr)){
-		while (k > 0 && (min > k/10 || min * 2 > k - ferr)){
+	if (min >= error){
+		while (k >= 5 && (min > k/10 || min * 2 > k - ferr)){
 			for (i = j = 0, --k; i < ref_len; ++i){
 				if (matrix[k][i] == error + 1)
 					break;
@@ -744,44 +736,44 @@ Cigar *SW_align(char *ref, unsigned int rstart, char *str, unsigned int ref_len,
 		add_cigar(cigar, SCLIP, len - k, NULL);
 		*score = len - k;
 		i = k;
+	} else {
+		if (xmin < len && k == len){
+			min += len - xmin;
+			xmin = len;
+		}
+		i = len;
 	}
 	k = xmin;
+	*score += min;
+
+	if (WRITE_BAM == 1){
+		add_cigar(cigar, MATCH, k, NULL);
+		return cigar;
+	}
 
 	while (i > 0 && k > 0){
 		pen = ascii_table[r[k - 1]] == ascii_table[q[i - 1]] ? 0: 1;
 		if (matrix[i][k] == matrix[i-1][k-1] + pen){
-			if (pen == 0){
+			if (pen == 0)
 				add_cigar(cigar, MATCH, 1, NULL);
-			} else {
-				++*score;
+			else 
 				add_cigar(cigar, DIFF, 1, r + k - 1);
-			}
-
 			--i;
 			--k;
 		} else if (matrix[i][k] == matrix[i - 1][k] + 1){
 			add_cigar(cigar, INSERT, 1, NULL);
 			--i;
-			++*score;
 		} else {
 			add_cigar(cigar, DELETE, 1, r + k - 1);
 			--k;
-			++*score;
 		}
 	}
 
-	*skip += err < 0? ref_len - k - len: k;
-	if (i > 0){
+	if (i > 0)
 		add_cigar(cigar, INSERT, i, NULL);
-		*score += i;
-	}
 
-	if (ref_len < read.len && k > 0){
-		for (i = 1; i <= k; ++i)
-			add_cigar(cigar, DELETE, 1, r + k - i);
-		*score += k;
-	}
-
+	for (i = 1; i <= k; ++i)
+		add_cigar(cigar, DELETE, 1, r + k - i);
 	return cigar;
 }
 
@@ -808,8 +800,8 @@ unsigned int re_mapSW(Candidate *r, unsigned short str, Read_inf read,
 		ref_start = r->pos[1 - str][i] == 0? 0:
 			    REF_INF->find[r->pos[1 - str][i] - 1];
 
-		cigar = SW_align(REF_INF->seq, ref_start + start, read.seq,
-			   len, read.len, &score1, 2*ERR*type, &skip, read);
+		cigar = ssw_align(REF_INF->seq + ref_start + start, len, read.seq,
+			read.len, &score1, &skip);
 
 		if (score1 > read.len/2 || start + skip < 0 ||
 		    start + skip + read.len > REF_INF->len[r->pos[1 - str][i]]){
@@ -862,7 +854,7 @@ unsigned int re_mapSW(Candidate *r, unsigned short str, Read_inf read,
 	r->p[str] = p;
 	r->err[str] = score2;
 
-	if (type > 0)
+	if (type <= 0)
 		reverse_cigar(new_cigar);
 
 	free_cigar(r->cigar[str]);
@@ -1298,7 +1290,7 @@ void get_SWalign(Read_inf read, unsigned int **pos, unsigned int id,
 	if (pos[2][id] > 0){
 		cigar = SW_align(REF_INF->seq, ref_start - add, read.seq,
 				    pos[2][id] + add, pos[2][id], &score,
-			     pos[2][id] < 2*ERR? -3 : -ERR, &skip, read);
+				          pos[2][id] < 2*ERR? -3 : -ERR);
                 err += score; 
 
 		if (err > read.len/2 || err > *max){
@@ -1327,7 +1319,7 @@ void get_SWalign(Read_inf read, unsigned int **pos, unsigned int id,
 		add = (i + 1) < n? 0: ERR;
 		tmp = SW_align(REF_INF->seq, ref_start + start,
 			    read.seq + start, len + add, len, &score,
-			     	   len < 2*ERR? 3: ERR, &skip, read);
+				     	        len < 2*ERR? 3: ERR);
 		err += score;
 
 		if (err > read.len/2 || err > *max + 1){
@@ -1606,10 +1598,7 @@ void add_class(Candidate *r, unsigned int pair)
 
 	if (r->n[0] == 1) {
 		++REF_INF->count[r->pos[0][0]];
-		pthread_mutex_unlock(&LOCK);
-	} else {
-		pthread_mutex_unlock(&LOCK);
-
+	} else if (r->err[0] + r->err[1] < ERR){
 		unsigned int id, i, tmp;
 
 		id = XXH32((char*) r->pos[0], r->n[0] * sizeof(int), 0);
@@ -1622,7 +1611,6 @@ void add_class(Candidate *r, unsigned int pair)
 		}
 
 		if (i == 0){
-			pthread_mutex_lock(&LOCK);
 			i = CLASS->n;
 			++CLASS->n;
 			CLASS->map[tmp & (H - 1)] = CLASS->n;
@@ -1631,17 +1619,14 @@ void add_class(Candidate *r, unsigned int pair)
 			CLASS->cls[i].ref = r->pos[0];
 			CLASS->cls[i].n = r->n[0];
 			CLASS->cls[i].id = id;
-			pthread_mutex_unlock(&LOCK);
-
 
 			free(r->p[0]);
 			r->n[0] = 0;
 		} else {
-			pthread_mutex_lock(&LOCK);
 			++CLASS->cls[i - 1].count;
-			pthread_mutex_unlock(&LOCK);
 		}
 	}
+	pthread_mutex_unlock(&LOCK);
 }
 
 void concate_candidate(Candidate *r1, Candidate *r2)
@@ -1903,35 +1888,102 @@ void align_read2(Read_inf read, char *stream, unsigned int *slen)
 	destroy_candidate(r);
 }
 
-void *align_pool(void *data)
+unsigned int get_reads(Read_inf *read1, Read_inf *read2)
 {
-	unsigned int i;
+	pthread_mutex_lock(&LOCK);
+	int l1, l2;
+	unsigned int n;
+	
+	n = 0;
+	while (n < GROUP){
+		l1 = kseq_read(R1);
+		l2 = kseq_read(R2);
+		while (l1 == -2 || l2 == -2){
+			++N_READ;
+			l1 = kseq_read(R1);
+			l2 = kseq_read(R2);
+		}
+		if (l1 == -1 || l2 == -1)
+			break;
 
-	if (!data) {
-		ERROR_PRINT("\tEmpty data in align_pool\n");
-		pthread_exit(NULL);
-		return NULL;
+		++N_READ;
+		MEAN_LEN += l1 + l2;
+
+		read1[n].seq = R1->seq.s;
+		read1[n].len = R1->seq.l;
+		read1[n].name = R1->name.s;
+		read1[n].qual = R1->qual.s;
+		read2[n].seq = R2->seq.s;
+		read2[n].len = R2->seq.l;
+		read2[n].qual = R2->qual.s;
+		read2[n].name = R2->name.s;
+
+		R1->seq.s = R2->seq.s = 0;
+		R1->qual.s = R2->qual.s = R1->name.s = R2->name.s = 0;
+		R1->qual.m = R2->qual.m = R1->name.m = R2->name.m = 0;
+		++n;
 	}
 
-	Thread_data *pair = (Thread_data *) data;
+	printf("\t\rNumber of processed pairs\t: %u", N_READ);
+	fflush(stdout);
+	if ((l1 == -1 || l2 == -1) && l1 != l2)
+		fprintf(stderr, "\n[WARNING] Number of reads in two files are not equal.\n");
+	pthread_mutex_unlock(&LOCK);
+	return n;
+}
+
+unsigned int get_reads_single(Read_inf *read)
+{
+	pthread_mutex_lock(&LOCK);
+	int l;
+	unsigned int n;
+	
+	n = 0;
+	while (n < GROUP){
+		l = kseq_read(R1);
+		while (l == -2)
+			l = kseq_read(R1);
+		if (l == -1)
+			break;
+
+		++N_READ;
+		MEAN_LEN += l;
+
+		read[n].seq = R1->seq.s;
+		read[n].len = R1->seq.l;
+		read[n].name = R1->name.s;
+		read[n].qual = R1->qual.s;
+
+		R1->seq.s = R1->qual.s = R1->name.s = 0;
+		R1->qual.m = R1->name.m = 0;
+		++n;
+	}
+
+	printf("\t\rNumber of processed reads\t: %u", N_READ);
+	fflush(stdout);
+	pthread_mutex_unlock(&LOCK);
+	return n;
+}
+
+void *align_pool(void *data)
+{
+	unsigned int i, n;
+	Read_inf read1[GROUP];
+	Read_inf read2[GROUP];
 	char *stream = malloc(MAX_COMPRESS);
 	unsigned int slen = 0;
 
-	for (i = 0; i < GROUP; ++i) 
-		align_read(pair->r1[i], pair->r2[i], stream, &slen);
+	do {
+		n = get_reads(read1, read2);
+		for (i = 0; i < n; ++i){
+			align_read(read1[i], read2[i], stream, &slen);
+			destroy_readInf(read1[i]);
+			destroy_readInf(read2[i]);
+		}
+	} while (n > 0);
 
 	if (slen > 0 && WRITE_BAM == 0)
 		bam_write(BAM, stream, slen);
-
-	if (pair) {
-		for (i = 0; i < GROUP; ++i) {
-			destroy_readInf(pair->r1[i]);
-			destroy_readInf(pair->r2[i]);
-		}
-		free(pair);
-		pair = NULL;
-		data = NULL;
-	}
 
 	free(stream);
 	pthread_exit(NULL);
@@ -1940,44 +1992,30 @@ void *align_pool(void *data)
 
 void *align_pool2(void *data)
 {
-	unsigned int i;
-
-	if (!data) {
-		ERROR_PRINT("\tEmpty data in align_pool\n");
-		pthread_exit(NULL);
-		return NULL;
-	}
-
-	Thread_data2 *read = (Thread_data2 *) data;
+	unsigned int i, n;
+	Read_inf read[GROUP];
 	char *stream = malloc(MAX_COMPRESS);
 	unsigned int slen = 0;
 
-	for (i = 0; i < 2 * GROUP; ++i) {
-		align_read2(read->r[i], stream, &slen);
-	}
+	do {
+		n = get_reads_single(read);
+		for (i = 0; i < n; ++i){
+			align_read2(read[i], stream, &slen);
+			destroy_readInf(read[i]);
+		}
+	} while (n > 0);
+
 	if (slen > 0 && WRITE_BAM == 0)
 		bam_write(BAM, stream, slen);
 
-	if (read) {
-		for (i = 0; i < 2 * GROUP; ++i) {
-			destroy_readInf(read->r[i]);
-		}
-		free(read);
-		read = NULL;
-		data = NULL;
-	}
-
 	free(stream);
 	pthread_exit(NULL);
-	retun NULL;
+	return NULL;
 }
 
 void get_alignment_pair(char *fq1, char *fq2)
 {
-
-	short l1, l2;
-	unsigned int n_read, i, k, rc;
-	kseq_t *r1, *r2;
+	unsigned int i, k, rc;
 	gzFile *input1, *input2;
 	pthread_t thr[NTHREAD];
 	pthread_attr_t attr;
@@ -1995,72 +2033,25 @@ void get_alignment_pair(char *fq1, char *fq2)
 	}
 
 	// Initialize
-	r1 = kseq_init(input1);
-	l1 = kseq_read(r1);
-	r2 = kseq_init(input2);
-	l2 = kseq_read(r2);
-	MAX_FRAG = 5 * l1;
+	R1 = kseq_init(input1);
+	R2 = kseq_init(input2);
 	memset(&thr, '\0', NTHREAD);
 	pthread_attr_init(&attr);
 	pthread_attr_setstacksize(&attr, STACK_SIZE);
 	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
 
-	for (n_read = 0; l1 >= 0 && l2 >= 0;) {
-		for (i = 0; i < NTHREAD && l1 >= 0 && l2 >= 0; ++i) {
-			Thread_data *thr_data = calloc(1, sizeof (Thread_data));
-			for (k = 0; k < GROUP && l1 >= 0 && l2 >= 0; ++k) {
-				++n_read;
-				MEAN_LEN += l1 + l2;
-
-				thr_data->r1[k].seq = r1->seq.s;
-				thr_data->r1[k].len = r1->seq.l;
-				thr_data->r1[k].name = r1->name.s;
-				thr_data->r1[k].qual = r1->qual.s;
-				thr_data->r2[k].seq = r2->seq.s;
-				thr_data->r2[k].len = r2->seq.l;
-				thr_data->r2[k].qual = r2->qual.s;
-				thr_data->r2[k].name = r2->name.s;
-
-				if (r1->qual.l == 0)
-					thr_data->r1[k].qual = calloc(l1 + 1, 1);
-				if (r2->qual.l == 0)
-					thr_data->r2[k].qual = calloc(l2 + 1, 1);
-
-				r1->seq.s = r2->seq.s = 0;
-				r1->qual.s = r2->qual.s = r1->name.s = r2->name.s = 0;
-				r1->qual.m = r2->qual.m = r1->name.m = r2->name.m = 0;
-
-				l1 = kseq_read(r1);
-				l2 = kseq_read(r2);
-				while ((l1 <= 0 || l2 <= 0) &&
-						   l1 != -1 && l2 != -1){
-					l1 = kseq_read(r1);
-					l2 = kseq_read(r2);
-				}
-
-				if (n_read % 100000 == 0){
-					printf("\t\rNumber of processed pairs\t: %u", n_read);
-					fflush(stdout);
-				}
-			}
-			thr_data->n = k;
-			rc = pthread_create(&thr[i], &attr, align_pool, thr_data);
-		}
-		for (; i > 0; --i) {
-			rc = pthread_join(thr[i - 1], NULL);
-		}
-	}
+	for (i = 0; i < NTHREAD; ++i) 
+		rc = pthread_create(&thr[i], &attr, align_pool, NULL);
+	for (; i > 0; --i)
+		rc = pthread_join(thr[i - 1], NULL);
 	pthread_attr_destroy(&attr);
-
-	if ((l1 != -1) || (l2 != -1))
-		ERROR_PRINT("[WARNING] Number of reads in two files are not equal.\n");
 
 	gzclose(input1);
 	gzclose(input2);
-	kseq_destroy(r1);
-	kseq_destroy(r2);
+	kseq_destroy(R1);
+	kseq_destroy(R2);
 
-	MEAN_LEN /= 2 * n_read;
+	MEAN_LEN /= 2 * N_READ;
 	MEAN_FRAG = MEAN_FRAG / PAIRED + MEAN_LEN;
 	for (i = 0; i < REF_INF->n; ++i) {
 		if (REF_INF->len[i] < MEAN_FRAG)
@@ -2069,26 +2060,25 @@ void get_alignment_pair(char *fq1, char *fq2)
 			REF_INF->eff_len[i] = REF_INF->len[i] - MEAN_FRAG + 1;
 	}
 
-	printf("\rNumber of aligned pairs\t: %u/%u\n", MAPPED, n_read);
+	printf("\rNumber of aligned pairs\t: %u/%u\n", MAPPED, N_READ);
 	printf("Mean read length\t: %f\n", MEAN_LEN);
 	printf("Mean fragment length\t: %f\n", MEAN_FRAG);
 
 	fprintf(SUMMARY, "\nMAPPING RESULT:\n");
-	fprintf(SUMMARY, "\tTotal number of read pairs\t\t\t: %u\n", n_read);
+	fprintf(SUMMARY, "\tTotal number of read pairs\t\t\t: %u\n", N_READ);
 	fprintf(SUMMARY, "\t\t- Number of proper mapped pairs\t: %u (%f)\n",
-					  PAIRED, (float) PAIRED/n_read);
+					  PAIRED, (float) PAIRED/N_READ);
 	fprintf(SUMMARY, "\t\t- Number of unproper mapped pairs\t: %u (%f)\n",
-		      MAPPED -  PAIRED, (float)(MAPPED -  PAIRED)/n_read);
+		      MAPPED -  PAIRED, (float)(MAPPED -  PAIRED)/N_READ);
 	fprintf(SUMMARY, "\t\t- Number of unmapped pairs\t\t: %u (%f)\n",
-		       n_read - MAPPED, (float) (n_read - MAPPED)/n_read);
+			N_READ - MAPPED, (float) (N_READ - MAPPED)/N_READ);
 	fprintf(SUMMARY, "\tMean read length\t\t\t: %f\n", MEAN_LEN);
 	fprintf(SUMMARY, "\tMean fragment length\t\t\t: %f\n", MEAN_FRAG);
 }
 
 void get_alignment(char *fq)
 {
-	short l;
-	unsigned int n_read, i, k, rc;
+	unsigned int i, k, rc;
 	kseq_t *r;
 	gzFile *input;
 	pthread_t thr[NTHREAD];
@@ -2101,52 +2091,22 @@ void get_alignment(char *fq)
 	}
 
 	// Initialize
-	r = kseq_init(input);
-	l = kseq_read(r);
+	R1 = kseq_init(input);
 	memset(&thr, '\0', NTHREAD);
 	pthread_attr_init(&attr);
 	pthread_attr_setstacksize(&attr, STACK_SIZE);
 	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
 
-	for (n_read = 0; l >= 0;) {
-		for (i = 0; i < NTHREAD && l >= 0; ++i) {
-			Thread_data2 *thr_data =
-				 calloc(1, sizeof (Thread_data2));
-			for (k = 0; k < 2 * GROUP && l >= 0; ++k) {
-				++n_read;
-				MEAN_LEN += l;
-				if (n_read % 100000 == 0){
-					printf("\t\rNumber of processed reads\t: %u", n_read);
-					fflush(stdout);
-				}
-
-				thr_data->r[k].seq = r->seq.s;
-				thr_data->r[k].qual = r->qual.s;
-				thr_data->r[k].name = r->name.s;
-				thr_data->r[k].len = l;
-				if (r->qual.l == 0)
-					thr_data->r[k].qual = calloc(l + 1, 1);
-
-				r->seq.s = r->qual.s = r->name.s = 0;
-				r->qual.m = r->name.m = 0;
-				l = kseq_read(r);
-				while (l <= 0 && l != -1)
-					l = kseq_read(r);
-			}
-			thr_data->n = k;
-			rc = pthread_create(&thr[i], &attr, align_pool2, thr_data);
-		}
-
-		for (; i > 0; --i) {
-			pthread_join(thr[i - 1], NULL);
-		}
-	}
+	for (i = 0; i < NTHREAD; ++i) 
+		rc = pthread_create(&thr[i], &attr, align_pool2, NULL);
+	for (; i > 0; --i)
+		rc = pthread_join(thr[i - 1], NULL);
 	pthread_attr_destroy(&attr);
 
 	gzclose(input);
-	kseq_destroy(r);
+	kseq_destroy(R1);
 
-	MEAN_LEN /= n_read;
+	MEAN_LEN /= N_READ;
 	MEAN_FRAG = MEAN_LEN;
 	for (i = 0; i < REF_INF->n; ++i) {
 		if (REF_INF->len[i] < MEAN_FRAG)
@@ -2154,15 +2114,14 @@ void get_alignment(char *fq)
 		else
 			REF_INF->eff_len[i] = REF_INF->len[i] - MEAN_FRAG + 1;
 	}
-	printf("\rNumber of aligned reads\t: %u/%u\n", PAIRED, n_read);
+	printf("\rNumber of aligned reads\t: %u/%u\n", PAIRED, N_READ);
 	printf("Mean read lenght\t: %f\n", MEAN_LEN);
 
 	fprintf(SUMMARY, "\nMAPPING RESULT:\n");
-	fprintf(SUMMARY, "\tTotal number of reads\t\t\t: %u\n", n_read);
+	fprintf(SUMMARY, "\tTotal number of reads\t\t\t: %u\n", N_READ);
 	fprintf(SUMMARY, "\t\t- Number of mapped reads\t: %u (%f)\n",
-					  PAIRED, (float) PAIRED/n_read);
+					  PAIRED, (float) PAIRED/N_READ);
 	fprintf(SUMMARY, "\t\t- Number of unmapped reads\t: %u (%f)\n",
-		       n_read - PAIRED, (float) (n_read - PAIRED)/n_read);
+			N_READ - PAIRED, (float) (N_READ - PAIRED)/N_READ);
 	fprintf(SUMMARY, "\tMean read length\t\t\t: %f\n", MEAN_LEN);
-
 }

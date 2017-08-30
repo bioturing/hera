@@ -118,10 +118,13 @@ def write_index(total_byte, gene_info):
 	print ("Extract transcript sequence")
 	outdir = args.outdir
 
+	if not os.path.exists(outdir):
+		os.makedirs(outdir)
+
 	# Store sequence of all transcript
-	f = open(outdir + "transcripts.fasta", "w")
+	f = open(os.path.join(outdir, "transcripts.fasta"), "w")
 	# Store index for query
-	fi = open(outdir + "reference.inf", "wb")
+	fi = open(os.path.join(outdir, "reference.inf"), "wb")
 
 	# BAM header [name length, name, sequence length]
 	maxNameLen = 0
@@ -211,8 +214,6 @@ if str(args.outdir) == "None":
 if str(args.grch38) == "None":
 	args.grch38 = "0"
 
-if args.outdir[-1] != '/':
-	args.outdir += '/'
 total_byte = load_genome(args)
 gene_info = extract_transcriptome(args)
 write_index(total_byte, gene_info)
@@ -222,4 +223,4 @@ path = sys.argv[0].replace("hera_build", "hera")
 full = args.full_index
 if str(full) == "None":
 	full = "0"
-subprocess.call([path , "index", args.outdir + "transcripts.fasta", args.fasta, args.outdir + "index", full])
+subprocess.call([path , "index", os.path.join(args.outdir, "transcripts.fasta"), args.fasta, os.path.join(args.outdir, "index"), full])

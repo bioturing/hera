@@ -3,7 +3,7 @@ LIBS= -pthread -lm lib/zlib/libz.a -lm lib/jemalloc/lib/libjemalloc.a -lm lib/hd
 CFLAGS=	-fgnu89-inline -O2 -D DEBUG -w -lrt
 Hera:	
 	mkdir -p build/
-	$(CC) $(CFLAGS) src/xxhash.c src/bgzf.c src/hash_align.c src/EM.c src/bam_write.c src/fusion.c src/fmindex.c src/genome_map.c src/assembly.c src/main.c $(LIBS) -o build/hera
+	$(CC) $(CFLAGS) src/ssw.c src/xxhash.c src/bgzf.c src/hash_align.c src/EM.c src/bam_write.c src/fusion.c src/fmindex.c src/genome_map.c src/assembly.c src/main.c $(LIBS) -o build/hera
 	cp src/hera_build build/hera_build
 	chmod +x build/hera_build
 clean:
