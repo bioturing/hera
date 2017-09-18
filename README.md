@@ -154,7 +154,7 @@ In order to detect fusions, <i>hera</i> keeps track of abnormally mapped reads. 
 
 # Contacts
 
-Please report any issues directly to the github issue tracker. Also, you can send your feedback to hera.rnaseq@gmail.com
+Please report any issues directly to the github issue tracker. Also, you can send your feedback to info@bioturing.com
 
 # Contributions
 BioTuring Algorithm Team & 
