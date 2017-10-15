@@ -142,6 +142,7 @@ In order to detect fusions, <i>hera</i> keeps track of abnormally mapped reads. 
   - abundance.h5   : Transcripts abundance estimation and boostrapping result (hdf5 file)
   - fusion.bedpe   : Fusion detection result (for paired-end data only)
   - transcript.bam : Alignment result
+  4. In the built-from-source version, reading from multiple read files from multiple lanes is supported, files in different lanes are separated by commas (,). Example: hera quant -i index/ -t 32 read_lane1_1.fastq,read_lane2_1 read_lane1_2.fastq,read_lane2_2 
 
 # Third-party
 
