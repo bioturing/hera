@@ -2050,30 +2050,6 @@ void get_alignment_pair(char *fq1, char *fq2)
 	gzclose(input2);
 	kseq_destroy(R1);
 	kseq_destroy(R2);
-
-	MEAN_LEN /= 2 * N_READ;
-	MEAN_FRAG = MEAN_FRAG / PAIRED + MEAN_LEN;
-	for (i = 0; i < REF_INF->n; ++i) {
-		if (REF_INF->len[i] < MEAN_FRAG)
-			REF_INF->eff_len[i] = 0;
-		else
-			REF_INF->eff_len[i] = REF_INF->len[i] - MEAN_FRAG + 1;
-	}
-
-	printf("\rNumber of aligned pairs\t: %u/%u\n", MAPPED, N_READ);
-	printf("Mean read length\t: %f\n", MEAN_LEN);
-	printf("Mean fragment length\t: %f\n", MEAN_FRAG);
-
-	fprintf(SUMMARY, "\nMAPPING RESULT:\n");
-	fprintf(SUMMARY, "\tTotal number of read pairs\t\t\t: %u\n", N_READ);
-	fprintf(SUMMARY, "\t\t- Number of proper mapped pairs\t: %u (%f)\n",
-					  PAIRED, (float) PAIRED/N_READ);
-	fprintf(SUMMARY, "\t\t- Number of unproper mapped pairs\t: %u (%f)\n",
-		      MAPPED -  PAIRED, (float)(MAPPED -  PAIRED)/N_READ);
-	fprintf(SUMMARY, "\t\t- Number of unmapped pairs\t\t: %u (%f)\n",
-			N_READ - MAPPED, (float) (N_READ - MAPPED)/N_READ);
-	fprintf(SUMMARY, "\tMean read length\t\t\t: %f\n", MEAN_LEN);
-	fprintf(SUMMARY, "\tMean fragment length\t\t\t: %f\n", MEAN_FRAG);
 }
 
 void get_alignment(char *fq)
@@ -2105,23 +2081,4 @@ void get_alignment(char *fq)
 
 	gzclose(input);
 	kseq_destroy(R1);
-
-	MEAN_LEN /= N_READ;
-	MEAN_FRAG = MEAN_LEN;
-	for (i = 0; i < REF_INF->n; ++i) {
-		if (REF_INF->len[i] < MEAN_FRAG)
-			REF_INF->eff_len[i] = 0;
-		else
-			REF_INF->eff_len[i] = REF_INF->len[i] - MEAN_FRAG + 1;
-	}
-	printf("\rNumber of aligned reads\t: %u/%u\n", PAIRED, N_READ);
-	printf("Mean read lenght\t: %f\n", MEAN_LEN);
-
-	fprintf(SUMMARY, "\nMAPPING RESULT:\n");
-	fprintf(SUMMARY, "\tTotal number of reads\t\t\t: %u\n", N_READ);
-	fprintf(SUMMARY, "\t\t- Number of mapped reads\t: %u (%f)\n",
-					  PAIRED, (float) PAIRED/N_READ);
-	fprintf(SUMMARY, "\t\t- Number of unmapped reads\t: %u (%f)\n",
-			N_READ - PAIRED, (float) (N_READ - PAIRED)/N_READ);
-	fprintf(SUMMARY, "\tMean read length\t\t\t: %f\n", MEAN_LEN);
 }
