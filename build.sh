@@ -26,26 +26,6 @@ make all
 make all install
 cd ../
 
-echo "Download JEMALLOC"
-if [ -f "jemalloc-4.5.0.tar.bz2" ]
-then
-	echo "jemalloc-4.5.0.tar.bz2 found."
-    rm -rf jemalloc-4.5.0
-else
-	wget https://github.com/jemalloc/jemalloc/releases/download/4.5.0/jemalloc-4.5.0.tar.bz2
-fi
-tar -xf jemalloc-4.5.0.tar.bz2
-
-echo "Build JEMALLOC"
-mv jemalloc-4.5.0 jemalloc
-cd jemalloc
-autoconf
-buildir=`pwd`
-./configure --prefix=$buildir/build --with-jemalloc-prefix="je_"
-make all
-make all install
-cd ../
-
 echo "Download HTSLIB"
 if [ -f "htslib-1.4.tar.bz2" ]
 then

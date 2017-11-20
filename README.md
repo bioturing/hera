@@ -4,18 +4,17 @@ Developed by BioTuring (www.bioturing.com), <i>hera</i> is a bioinformatics tool
 
 - Base-to-base alignment BAM file
 - Transcript abundance estimation
-- Fusion gene detection with fused sequence assemblies 
 
 Each process in <i>hera</i> was carefully organized and optimized in order to maximize the performance in term of time and accuracy. Hera quantification algorithm obtained the best ranking in a recent round of the SMC-RNA DREAM challenge: https://www.synapse.org/#!Synapse:syn2813589/wiki/423306 
 
 
 # Example data
-We designed a test using 20 datasets from Synapse Dream Challenge SMC-RNA, each of which contains 60 million read pairs. The test was done on a 32-core machine running Ubuntu 14.04. The result is shown in the table below:
+We using Sim41 dataset from Synapse Dream Challenge SMC-RNA round 4 (https://www.synapse.org/SMC_RNA), which contains 60 million read pairs with length is 100bp (gzipped input). The test was done on a 32-core machine running Ubuntu 14.04. The result is shown in the table below:
 
 <table width="100%">
    <tr>
-      <td rowspan="11" width="400px">
-         <img src="https://user-images.githubusercontent.com/13636609/28252091-a6d3126e-6ab6-11e7-90c4-2fee5f22716f.png" width="100%"/>
+      <td rowspan="9" width="500px">
+         <img src="https://user-images.githubusercontent.com/23278983/33005651-46a89246-cdf9-11e7-8221-33b83223acbd.png" width="100%"/>
       </td>
       <td></td>
       <td align="center"> <b>Transcriptome</b> </td>
@@ -25,42 +24,30 @@ We designed a test using 20 datasets from Synapse Dream Challenge SMC-RNA, each 
       <td colspan="3" align="center"> <b>Alignment</b> </td>
   </tr>
   <tr>
-      <td align="center">Mapped read </td>
-      <td align="center"> 93.3860% </td>
-      <td align="center"> 93.3871%  </td>
+      <td align="center">Mapped read</td>
+      <td align="center">93.3821%</td>
+      <td align="center">93.3851%</td>
   </tr>
   <tr>
-      <td align="center">Memory </td>
-      <td align="center"> 8GB </td>
-      <td align="center"> 30GB </td>
+      <td align="center">Memory</td>
+      <td align="center">6.2GB</td>
+      <td align="center">23.7GB</td>
   </tr> 
   <tr>
   <td colspan="3" align="center"> <b>Abundance estimation results</b> </td>
   </tr>
   <tr>
       <td align="center">Spearman</td>
-      <td align="center">0.9033</td>
-      <td align="center">0.9057</td>
+      <td align="center">0.92454</td>
+      <td align="center">0.92537</td>
   </tr>
   <tr>
       <td align="center">Pearson</td>
-      <td align="center">0.9951</td>
-      <td align="center">0.9951 </td>
+      <td align="center">0.94428</td>
+      <td align="center">0.94428</td>
   </tr>
   <tr>
-  <td colspan="3" align="center"> <b>Gene fusion results</b> </td>
-  </tr>
-  <tr>
-      <td align="center">True positive</td>
-      <td align="center" colspan="2">0.6960</td>
-  </tr>
-  <tr>
-      <td align="center">False negative</td>
-      <td align="center" colspan="2">0.304</td>
-  </tr>
-  <tr>
-      <td align="center">False positive</td>
-      <td align="center" colspan="2">0.0595</td>
+  <td colspan="3" align="center"> </td>
   </tr>
 </table>
 
@@ -74,16 +61,12 @@ In another hand, <i>hera</i> is still able to perform the common genome mapping 
 ### Abundance estimation
 Expectation–maximization algorithm is optimized with the SQUAREM procedure (Varadhan, R. & Roland, C. Scand. J. Stat. 35, 335–353 (2008)).
    
-### Fusion detection
-In order to detect fusions, <i>hera</i> keeps track of abnormally mapped reads. Based on their potential fusion site, these reads are divided into several groups, each of which is assembled into a super contig. These contigs will be mapped back onto the reference genome and thereby reveal their fusion gene pairs.
-
 # Build requirements:
  
   * GNU GCC C Compiler
   * CMake (http://www.cmake.org/) version 3.1.0 or newer
   * liblzma-dev (Ubuntu) or xz-devel (Centos, Fedora, Red Hat) or xz (MacOS)
   * libbz2-dev (Ubuntu) or bzip2-devel.x86_64 (Centos, Fedora, Red Hat) or bzip2 (MacOS)
-  * libz-dev (Ubuntu) or zlib-devel.x86_64 (Centos, Fedora, Red Hat) or zlib (MacOS)
 
 # Install:
 
@@ -105,7 +88,7 @@ In order to detect fusions, <i>hera</i> keeps track of abnormally mapped reads. 
 
 ### INDEX:
   ```
-  ./hera/build/hera_build
+  ./hera_build
           --fasta genome_sequence.fa (text file only)
           --gtf annotation_file.gtf
           --outdir path/to/output_directory
@@ -120,36 +103,51 @@ In order to detect fusions, <i>hera</i> keeps track of abnormally mapped reads. 
 
 ### RUN:
   ```
-  ./hera/build/hera quant -i path/to/index_directory [OPTIONAL] read1.fastq read2.fastq
+  ./hera quant [arguments]
   
-  [OPTIONAL]:
-    -o [output directory] (default: ./)
-    -t [number of running threads] (default: 1)
-    -z [level of bam file compression (1 - 9)] (default: -1)
-    -b [Number of boostrap] (default: 1)
-    -w [Output bam file 0: true, 1: false] (defaut: 0)
-    -f [Genome fasta file]
-   ```
+  Required arguments:
+    -1 <read-files>    Input left read-files, separated by space
+    -2 <read-files>    Input right read-files, separated by space
+                       (using -1 only if quantify for single-end reads)
+    -i <STRING>        path to hera index directory
+
+  Optional arguments:
+    -o <STRING>        Output directory (default: ./)
+    -t <INT>           Number of threads (default: 1)
+    -b <INT>           Number of bootstrap samples (default: 0)
+    -f <genome-file>   Genome mapping, need full index to use this option
+                       (if not define, genome mapping will be ignore)
+    -p <STRING>        Output prefix (default: '')
+    -w                 Output bam file
+    -z <INT>           Bam compress level (1 - 9) (default: -1)
+    -v                 Verbose mode
+    -h                 Print help
   
-  Eg: hera quant -i index/ -t 32 read1.fastq read2.fastq
-  
-  1. <b>Index directory</b>: Directory contain index file from previous index step
+  Example: 
+  ./hera quant -i hera_index/ -w -t 32 -b 100 -o hera_output/
+    -1 read_1.fq.gz -2 read_2.fq.gz
+  (Output bam file, 32 threads, 100 bootstrap samples, paired-end mode)
+
+  ./hera quant -i hera_index/ -t 32 -f GRCh37_75_homo_sapiens.fa
+    -o hera_output/ -1 read_lane_1.fq.gz read_lane_2.fq.gz
+  (No bam, 32 threads, genome mapping, single-end mode with multiple file)
+  ```
+
+  1. <b>Hera index directory</b>: Directory contain index file from previous index step
   
   2. <b>Genome fasta file</b>: If not defined, genome mapping will be ignore. Mapping on transcriptome needs ~8BG, but mapping with genome needs ~30GB.
   
-  3. Output file include:
+  3. <b>Output file include</b>:
   - abundance.tsv  : Transcripts abundance estimation (tsv file)
   - abundance.h5   : Transcripts abundance estimation and boostrapping result (hdf5 file)
-  - fusion.bedpe   : Fusion detection result (for paired-end data only)
   - transcript.bam : Alignment result
-  4. In the built-from-source version, reading from multiple read files from multiple lanes is supported, files in different lanes are separated by commas (,). Example: hera quant -i index/ -t 32 -1 read_lane1_1.fastq,read_lane2_1 -2 read_lane1_2.fastq,read_lane2_2 
+  4. In the built-from-source version, reading from multiple read files from multiple lanes is supported, files in different lanes are separated by space. Example: hera quant -i index/ -t 32 -1 read_lane1_1.fastq read_lane2_1 -2 read_lane1_2 fastq,read_lane2_2 
 
 # Third-party
 
 <i>hera</i> includes some third-patry software:
   * hdf5 [https://support.hdfgroup.org/HDF5/]
   * htslib [http://www.htslib.org/]
-  * jemalloc [http://jemalloc.net/]
   * libdivsufsort [https://github.com/y-256/libdivsufsort]
   * zlib [https://zlib.net/]
 
@@ -159,7 +157,7 @@ Please report any issues directly to the github issue tracker. Also, you can sen
 
 # Contributions
 BioTuring Algorithm Team & 
-Thao Truong, Khoa Nguyen, Tuan Tran, and Son Pham
+Thao Truong, Khoa Nguyen, Tuan Tran, Thang Tran and Son Pham
 
 # License
 

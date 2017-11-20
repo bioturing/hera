@@ -1,5 +1,7 @@
 #include "hash_align.h"
 #include "ssw.h"
+#include "get_buffer.h"
+#include "macros.h"
 
 unsigned int ascii_table[256] = {
 	4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,
@@ -21,7 +23,6 @@ unsigned int ascii_table[256] = {
 };
 
 const unsigned int H = (int) 1 << 27;
-unsigned int NTHREAD = 1;
 int COMPRESS_LEVEL = -1;
 double MEAN_FRAG = 0;
 double MEAN_LEN = 0;
@@ -35,15 +36,14 @@ Gclass *CLASS;
 pthread_mutex_t LOCK = PTHREAD_MUTEX_INITIALIZER;
 pthread_rwlock_t LOCK_RW = PTHREAD_RWLOCK_INITIALIZER;
 
+static pthread_mutex_t LOCK_CNT = PTHREAD_MUTEX_INITIALIZER;
+static pthread_mutex_t LOCK_CLASS = PTHREAD_MUTEX_INITIALIZER;
+
 Ref_inf *REF_INF;
 Gene_map *GENE_MAP;
 Kmer_hash *KMER_HASH;
-Fusion *FUSION;
 FMindex *FMINDEX;
 bamFile BAM;
-FILE *SUMMARY;
-FILE *OUT_FUSION;
-kseq_t *R1, *R2;
 
 void hera_write(bamFile bam_file, void *input_buf, unsigned int block_length)
 {
@@ -88,31 +88,25 @@ void hera_write(bamFile bam_file, void *input_buf, unsigned int block_length)
 				    GZIP_WINDOW_BITS, Z_DEFAULT_MEM_LEVEL,
 						      Z_DEFAULT_STRATEGY);
 
-		if (status != Z_OK) {
-			ERROR_PRINT("Deflate init failed\n");
-			exit(EXIT_FAILURE);
-		}
+		if (status != Z_OK)
+			_error("Deflate init failed\n");
 
 		status = deflate(&zs, Z_FINISH);
 		if (status != Z_STREAM_END) {
 			deflateEnd(&zs);
 			if (status == Z_OK) {
 				input_length -= 1024;
-				if (input_length <= 0) {
-					ERROR_PRINT("Input reduction failed\n");
-					exit(EXIT_FAILURE);
-				}
+				if (input_length <= 0)
+					_error("Input reduction failed\n");
 				continue;
 			}
-			ERROR_PRINT("Deflate failed\n");
-			exit(EXIT_FAILURE);
+			_error("Deflate failed\n");
 		}
 
 		status = deflateEnd(&zs);
-		if (status != Z_OK) {
-			ERROR_PRINT("Deflate end failed\n");
-			exit(EXIT_FAILURE);
-		}
+		if (status != Z_OK)
+			_error("Deflate end failed\n");
+
 		compressed_length = zs.total_out;
 		compressed_length += BLOCK_HEADER_LENGTH + BLOCK_FOOTER_LENGTH;
 		break;
@@ -126,10 +120,9 @@ void hera_write(bamFile bam_file, void *input_buf, unsigned int block_length)
 
 	remaining = block_length - input_length;
 	if (remaining > 0) {
-		if (remaining > input_length) {
-			ERROR_PRINT("Remainder too large\n");
-			exit(EXIT_FAILURE);
-		}
+		if (remaining > input_length)
+			_error("Remainder too large\n");
+		
 		memcpy(input_buf, input_buf + input_length, remaining);
 	}
 
@@ -276,7 +269,7 @@ void merge_sort(unsigned int **arr1,  unsigned int n1,
 		} else if (arr1[0][i] > arr2[0][k]){
 			add_sort(new_arr, arr2, idx, &n, &k);
 		} else {
-			dis = ABS((arr2[1][k] - arr1[1][i]) -
+			dis = _abs((arr2[1][k] - arr1[1][i]) -
 					  (idx - arr1[2][i]));
 			if (dis < 2*ERR){
 				add_sort(new_arr, arr1, arr1[2][i], &n, &i);
@@ -355,18 +348,18 @@ void swap_trans(Candidate *r1, unsigned int p1,
 	r2->n[p2] = n;
 }
 
-void check_mate(Candidate *r1, Read_inf read1, Read_inf read2,
+void check_mate(Candidate *r1, struct read_inf *read1, struct read_inf *read2,
 	   		      unsigned int len, unsigned site)
 {
 	if (len < KMER)
 		return;
 
 	Candidate *r2;
-	Read_inf anchor;
+	struct read_inf *anchor;
 
 	r2 = init_candidate();
-	anchor.len = len;
-	anchor.seq = read1.seq + (site > 0? read1.len - len: 0);
+	anchor->len = len;
+	anchor->seq = read1->seq + (site > 0? read1->len - len: 0);
 
 	get_position(anchor, r2, 0, ERR);
 	get_position(anchor, r2, 1, ERR);
@@ -375,8 +368,6 @@ void check_mate(Candidate *r1, Read_inf read1, Read_inf read2,
 		swap_trans(r1, 0, r2, 0);
 	else
 		swap_trans(r1, 0, r2, 1);
-
-	fusion_add(r1, read1, read2);
 
 	if (r2->err[0] < r2->err[1])
 		swap_trans(r1, 0, r2, 0);
@@ -387,7 +378,7 @@ void check_mate(Candidate *r1, Read_inf read1, Read_inf read2,
 }
 
 void check_proper_pair(unsigned int i, Candidate *r,
-				     Read_inf read1, Read_inf read2)
+				     struct read_inf *read1, struct read_inf *read2)
 {
 	unsigned int n;
 
@@ -395,9 +386,9 @@ void check_proper_pair(unsigned int i, Candidate *r,
 	if (r->cigar[0]->type[0] == SCLIP){
 		check_mate(r, read1, read2, r->cigar[0]->count[0], 0);
 	} else if (r->cigar[1]->type[n] == SCLIP){
-                reverse_str(read2.seq, read2.len);
+                reverse_str(read2->seq, read2->len);
 		check_mate(r, read2, read1, r->cigar[1]->count[n], 1);
-                reverse_str(read2.seq, read2.len);
+                reverse_str(read2->seq, read2->len);
 	}	
 }
 
@@ -435,15 +426,6 @@ unsigned int check_quanlity(Candidate *r, unsigned int p)
 	return k;
 }
 
-void store_fusion(Candidate *r, Read_inf read1, Read_inf read2)
-{
-	unsigned int i, k;
-	if (r->pair > 1)
-		check_proper_pair(i, r, read1, read2);
-	else
-		fusion_add(r, read1, read2);
-}
-
 unsigned int *intersect(unsigned int *arr1, unsigned int *arr2,
                                      unsigned int *size1, unsigned int *size2,
                                                     int **p, unsigned int add)
@@ -463,7 +445,7 @@ unsigned int *intersect(unsigned int *arr1, unsigned int *arr2,
                                         arr1[j] == arr1[i] && has == 0; ++j) {
 				for (l = k; l < *size2 &&
                                                     arr2[l] == arr2[k]; ++l) {
-					dis = ABS(p[0][j] - p[1][l]);
+					dis = _abs(p[0][j] - p[1][l]);
 					if (dis == add) {
 						++n;
 
@@ -648,7 +630,7 @@ Cigar *SW_align(char *ref, unsigned int rstart, char *str, unsigned int ref_len,
 	int i, k, j, ferr;
 	unsigned int s, pen, min, xmin, add;
 	unsigned short matrix[len + 1][ref_len + 1];
-	unsigned short error = ABS(err) + 1;
+	unsigned short error = _abs(err) + 1;
 	char r[ref_len], q[len];
 
 	memcpy(r, ref + rstart, ref_len);
@@ -685,7 +667,7 @@ Cigar *SW_align(char *ref, unsigned int rstart, char *str, unsigned int ref_len,
 				pen = ascii_table[r[i-1]] ==
 				      ascii_table[q[k - 1]] ? 0: 1;
 
-			matrix[k][i] = MIN3(matrix[k-1][i-1] + pen,
+			matrix[k][i] = _min3(matrix[k-1][i-1] + pen,
                             matrix[k][i-1] + 1, matrix[k-1][i] + 1);
 
 			if (matrix[k][i] == error && j == 0)
@@ -777,7 +759,7 @@ Cigar *SW_align(char *ref, unsigned int rstart, char *str, unsigned int ref_len,
 	return cigar;
 }
 
-unsigned int re_mapSW(Candidate *r, unsigned short str, Read_inf read,
+unsigned int re_mapSW(Candidate *r, unsigned short str, struct read_inf *read,
 						    	     int type)
 {
 	unsigned int i, k, new_n, ref_start, len, *pos;
@@ -785,7 +767,7 @@ unsigned int re_mapSW(Candidate *r, unsigned short str, Read_inf read,
 	Cigar *cigar, *new_cigar;
 
 	cigar = new_cigar = NULL;
-	range = type > 0? 0: read.len - MAX_FRAG;
+	range = type > 0? 0: read->len - MAX_FRAG;
 
 	for (i = new_n = 0; i < r->n[1 - str]; ++i){
 		start = r->p[1 - str][i] + range;
@@ -800,11 +782,11 @@ unsigned int re_mapSW(Candidate *r, unsigned short str, Read_inf read,
 		ref_start = r->pos[1 - str][i] == 0? 0:
 			    REF_INF->find[r->pos[1 - str][i] - 1];
 
-		cigar = ssw_align(REF_INF->seq + ref_start + start, len, read.seq,
-			read.len, &score1, &skip);
+		cigar = ssw_align(REF_INF->seq + ref_start + start, len, read->seq,
+			read->len, &score1, &skip);
 
-		if (score1 > read.len/2 || start + skip < 0 ||
-		    start + skip + read.len > REF_INF->len[r->pos[1 - str][i]]){
+		if (score1 > read->len/2 || start + skip < 0 ||
+		    start + skip + read->len > REF_INF->len[r->pos[1 - str][i]]){
 			free_cigar(cigar);
 			continue;
 		}
@@ -879,10 +861,9 @@ void init_hash()
 
 inline unsigned int hash_get(unsigned long id, unsigned int *ret, unsigned int add)
 {
-	unsigned int block, mod;
+	unsigned int mod;
 
 	mod  = id & (H - 1);
-	block = id / H;
 
 	*ret = 0;
 	if (KMER_HASH->n[mod] == 0)
@@ -894,18 +875,18 @@ inline unsigned int hash_get(unsigned long id, unsigned int *ret, unsigned int a
 
 	while (start != end) {
 		mid = (start + end) >> 1;
-		if (KMER_HASH->bucket[mod][mid].id == block) {
+		if (KMER_HASH->bucket[mod][mid].id == id) {
 			start = end = mid;
 			break;
 		}
 
-		if (KMER_HASH->bucket[mod][mid].id > block)
+		if (KMER_HASH->bucket[mod][mid].id > id)
 			end = mid;
 		else
 			start = mid + 1;
 	}
 
-	if (start < KMER_HASH->n[mod] && KMER_HASH->bucket[mod][mid].id == block){
+	if (start < KMER_HASH->n[mod] && KMER_HASH->bucket[mod][mid].id == id){
 		KMER_HASH->bucket[mod][mid].end += add;
 		*ret = 1;
 	}
@@ -917,10 +898,9 @@ inline unsigned int hash_get(unsigned long id, unsigned int *ret, unsigned int a
 
 inline void hash_put(unsigned long id, unsigned int ins, unsigned int order)
 {
-	unsigned int i, mod, block;
+	unsigned int i, mod;
 
 	mod = id & (H - 1);
-	block = id / H;
 
 	i = KMER_HASH->n[mod];
 	++KMER_HASH->n[mod];
@@ -935,7 +915,7 @@ inline void hash_put(unsigned long id, unsigned int ins, unsigned int order)
                                      	  	  (i - ins) * sizeof (Bucket));
 	}
 
-	KMER_HASH->bucket[mod][ins].id = block;
+	KMER_HASH->bucket[mod][ins].id = id;
 	KMER_HASH->bucket[mod][ins].end = 1;
 }
 
@@ -943,9 +923,13 @@ void destroy_hash()
 {
 	unsigned int i, k;
 
-	for (i = 0; i < H + 1; i++) 
-		if (KMER_HASH->n[i] > 0)
-			free(KMER_HASH->bucket[i]);
+	if (KMER_HASH->bucket) {
+		free(KMER_HASH->sentinel);
+	} else {
+		for (i = 0; i < H; i++) 
+			if (KMER_HASH->n[i] > 0)
+				free(KMER_HASH->bucket[i]);
+	}
 
 	free(KMER_HASH->bucket);
 	free(KMER_HASH->n);
@@ -1004,13 +988,6 @@ void destroy_candidate(Candidate *read)
 	free(read);
 }
 
-void destroy_readInf(Read_inf read)
-{
-	free(read.seq);
-	free(read.qual);
-	free(read.name);
-}
-
 /******************************************************************************
  * ************************************************************************** *
  * *                                INDEX                                   * *
@@ -1039,10 +1016,9 @@ void get_name(char *file_path)
 
 	// Init
 	fa = gzopen(file_path, "r");
-	if (!fa) {
-		ERROR_PRINT("Can not open file %s\nExit.\n", file_path);
-		exit(EXIT_FAILURE);
-	}
+	if (!fa)
+		_error("Can not open file %s\n", file_path);
+
 	ref = kseq_init(fa);
 	n = total = sum = 0;
 	name = malloc(1);
@@ -1086,6 +1062,7 @@ void construct_hash(unsigned int total_length)
 	unsigned long idx;
 	unsigned int i, k, p, ch, pos, start, count, mod, ret;
 
+	KMER_HASH->is_loaded = 0;
 	KMER_HASH->n_pos = total_length;
 	KMER_HASH->pos = calloc(total_length, sizeof(int));
 	KMER_HASH->p = calloc(total_length, sizeof(int));
@@ -1167,28 +1144,18 @@ void write_to_file(char *out_file)
 	destroy_refInf();
 
 	// Write hash table
-	for (i = 0; i < H + 1; ++i) {
+	fwrite(KMER_HASH->n, sizeof(unsigned int), H, out);
+	for (i = 0; i < H; ++i) {
 		if (KMER_HASH->n[i] == 0) continue;
-		fwrite(&i, sizeof (int), 1, out);
-		fwrite(&KMER_HASH->n[i], sizeof (int), 1, out);
 		fwrite(KMER_HASH->bucket[i], sizeof (Bucket),
 					 KMER_HASH->n[i], out);
 	}
-	fwrite(&j, sizeof (int), 1, out);
 
 	fwrite(&KMER_HASH->n_pos, sizeof (int), 1, out);
 	fwrite(KMER_HASH->pos, sizeof (int), KMER_HASH->n_pos, out);
 	fwrite(KMER_HASH->p, sizeof (int), KMER_HASH->n_pos, out);
 
 	destroy_hash();	
-}
-
-void init_fusion()
-{
-	FUSION = calloc(1, sizeof(Fusion));
-	FUSION->n = FUSION->n_read = 0;
-	FUSION->detail = calloc(1, sizeof(Fusion_inf));
-	FUSION->read = calloc(1, sizeof(char*));
 }
 
 void init_class()
@@ -1202,16 +1169,22 @@ void init_class()
 void load_hash(FILE *input)
 {
 	int i, ret;
+	unsigned int count;
 
-	ret = fread(&i, sizeof (int), 1, input);
-	while (i >= 0) {
-		ret = fread(&KMER_HASH->n[i], sizeof (int), 1, input);
-		KMER_HASH->bucket[i] = calloc(KMER_HASH->n[i], sizeof (Bucket));
-		ret = fread(KMER_HASH->bucket[i], sizeof (Bucket),
-							 KMER_HASH->n[i], input);
-		ret = fread(&i, sizeof (int), 1, input);
+	KMER_HASH->is_loaded = 1;
+	ret = fread(KMER_HASH->n, sizeof(unsigned int), H, input);
+	count = 0;
+	for (i = 0; i < H; ++i)
+		count += KMER_HASH->n[i];
+	KMER_HASH->sentinel = malloc(count * 1ULL * sizeof(Bucket));
+	ret = fread(KMER_HASH->sentinel, sizeof(Bucket), count, input);
+	if (ret != count) {
+		fprintf(stderr, "\tLoading: Fatal Error.\n");
 	}
-
+	for (i = count = 0; i < H; ++i) {
+		KMER_HASH->bucket[i] = KMER_HASH->sentinel + count;
+		count += KMER_HASH->n[i];
+	}
 	ret = fread(&KMER_HASH->n_pos, sizeof (int), 1, input);
 	KMER_HASH->pos = calloc(KMER_HASH->n_pos, sizeof(int));
 	KMER_HASH->p = calloc(KMER_HASH->n_pos, sizeof(int));
@@ -1254,7 +1227,6 @@ void load_index(char *idx_dir, char *genome)
 	fclose(input);
 
 	init_class();
-	init_fusion();
 
 	FMINDEX = NULL;
 	if (genome != NULL)
@@ -1267,7 +1239,7 @@ void load_index(char *idx_dir, char *genome)
  * ************************************************************************** * 
  ******************************************************************************/
 
-void get_SWalign(Read_inf read, unsigned int **pos, unsigned int id, 
+void get_SWalign(struct read_inf *read, unsigned int **pos, unsigned int id, 
 		unsigned int n, unsigned int *store, unsigned int *max,
 					Candidate *r, unsigned int str)
 {
@@ -1275,12 +1247,12 @@ void get_SWalign(Read_inf read, unsigned int **pos, unsigned int id,
 	int start, score, skip, err, sub;
 	Cigar *cigar, *tmp;
 
-	if (n > 1 && pos[1][id + n -1] - pos[1][id] > read.len)
+	if (n > 1 && pos[1][id + n -1] - pos[1][id] > read->len)
 		return;
 
 	start = pos[1][id] - (pos[2][id] + KMER - 1);
 
-	if (start < 0 || start + read.len > REF_INF->len[pos[0][id]])
+	if (start < 0 || start + read->len > REF_INF->len[pos[0][id]])
 		return;
 
 	add = start < ERR? start: ERR;
@@ -1288,12 +1260,12 @@ void get_SWalign(Read_inf read, unsigned int **pos, unsigned int id,
 	err = sub = 0;
 
 	if (pos[2][id] > 0){
-		cigar = SW_align(REF_INF->seq, ref_start - add, read.seq,
+		cigar = SW_align(REF_INF->seq, ref_start - add, read->seq,
 				    pos[2][id] + add, pos[2][id], &score,
 				          pos[2][id] < 2*ERR? -3 : -ERR);
                 err += score; 
 
-		if (err > read.len/2 || err > *max){
+		if (err > read->len/2 || err > *max){
 			free_cigar(cigar);
 			return;
 		}
@@ -1315,14 +1287,14 @@ void get_SWalign(Read_inf read, unsigned int **pos, unsigned int id,
 			  pos[2][id + i] - pos[2][id + start] + KMER, NULL);
 
 		start = pos[2][id + i] + KMER;
-		len = ((i + 1) < n? pos[2][id + i + 1] : read.len) - start;
+		len = ((i + 1) < n? pos[2][id + i + 1] : read->len) - start;
 		add = (i + 1) < n? 0: ERR;
 		tmp = SW_align(REF_INF->seq, ref_start + start,
-			    read.seq + start, len + add, len, &score,
+			    read->seq + start, len + add, len, &score,
 				     	        len < 2*ERR? 3: ERR);
 		err += score;
 
-		if (err > read.len/2 || err > *max + 1){
+		if (err > read->len/2 || err > *max + 1){
 			free_cigar(tmp);
 			free_cigar(cigar);
 			return;
@@ -1332,7 +1304,7 @@ void get_SWalign(Read_inf read, unsigned int **pos, unsigned int id,
 		free_cigar(tmp);
 	}
 
-	if (*max == read.len/2 || err < *max){
+	if (*max == read->len/2 || err < *max){
 		tmp = r->cigar[str];
 		r->cigar[str] = cigar;
 		cigar = tmp;
@@ -1347,17 +1319,17 @@ void get_SWalign(Read_inf read, unsigned int **pos, unsigned int id,
 	free_cigar(cigar);
 }
 
-void get_position(Read_inf read, Candidate *r, unsigned short str, short space)
+void get_position(struct read_inf *read, Candidate *r, unsigned short str, short space)
 {
 	unsigned int i, k, pos, add, max, mod, ret;
 	unsigned long idx;
 	unsigned int *pos1[3], *pos2[3], n1, n2, n;
 
 	if (str == 1)
-		reverse_str(read.seq, read.len);
+		reverse_str(read->seq, read->len);
 
-	for (i = n1 = n2 = 0; i + KMER <= read.len; i += ABS(space)){
-		idx = get_index(i, read.seq);
+	for (i = n1 = n2 = 0; i + KMER <= read->len; i += _abs(space)){
+		idx = get_index(i, read->seq);
 		pos = hash_get(idx, &ret, 0);
 
 		if (ret == 0)
@@ -1393,7 +1365,7 @@ void get_position(Read_inf read, Candidate *r, unsigned short str, short space)
 		goto exit;
 	n1 = 0;
 	if (r->n[1 - str] > 0 && space < KMER && space > 0){
-		for (i = k =  n1 = 0, max = read.len/2; i < n2; ++i){
+		for (i = k =  n1 = 0, max = read->len/2; i < n2; ++i){
 			if (pos2[0][i] < r->pos[1 - str][k])
 				continue;
 			while (pos2[0][i] > r->pos[1 - str][k] &&
@@ -1406,33 +1378,33 @@ void get_position(Read_inf read, Candidate *r, unsigned short str, short space)
 			while (i + 1 < n2 && pos2[0][i] == pos2[0][i + 1] &&
 			    pos2[2][i + 1] > pos2[2][i] &&
 			    pos2[1][i + 1] > pos2[1][i + 1 - n] &&
-			    pos2[1][i + 1] - pos2[1][i + 1 - n] < read.len){
+			    pos2[1][i + 1] - pos2[1][i + 1 - n] < read->len){
 				++i;
 				++n;
 			}
 
 			get_SWalign(read, pos2, i + 1 - n, n, &n1, &max, r, str);
 			for (; n > 0; --n)
-				pos2[2][i + 1 - n] = read.len;
+				pos2[2][i + 1 - n] = read->len;
 		}
 	}
 
 	if (n1 == 0) {
-		for (i = n1 = 0, max = read.len/2; i < n2; ++i){
-			if (pos2[2][i] == read.len)
+		for (i = n1 = 0, max = read->len/2; i < n2; ++i){
+			if (pos2[2][i] == read->len)
 				continue;
 
 			n = 1;
 			while (i + 1 < n2 && pos2[0][i] == pos2[0][i + 1] &&
 			    pos2[2][i + 1] > pos2[2][i] &&
 			    pos2[1][i + 1] > pos2[1][i + 1 - n] &&
-			    pos2[1][i + 1] - pos2[1][i + 1 - n] < read.len &&
-			    pos2[2][i + 1] != read.len){
+			    pos2[1][i + 1] - pos2[1][i + 1 - n] < read->len &&
+			    pos2[2][i + 1] != read->len){
 				++i;
 				++n;
 			}
 
-			if (n < 2 && read.len / KMER > 2)
+			if (n < 2 && read->len / KMER > 2)
 				continue;
 
 			get_SWalign(read, pos2, i - n + 1, n, &n1, &max, r, str);
@@ -1440,16 +1412,16 @@ void get_position(Read_inf read, Candidate *r, unsigned short str, short space)
 	}
 
 	if (n1 == 0 && space < KMER){
-		for (i = n1 = 0, max = read.len/2; i < n2; ++i){
-			if (pos2[2][i] == read.len)
+		for (i = n1 = 0, max = read->len/2; i < n2; ++i){
+			if (pos2[2][i] == read->len)
 				continue;
 
 			n = 1;
 			while (i + 1 < n2 && pos2[0][i] == pos2[0][i + 1] &&
 			    pos2[2][i + 1] > pos2[2][i] &&
 			    pos2[1][i + 1] > pos2[1][i + 1 - n] &&
-			    pos2[1][i + 1] - pos2[1][i + 1 - n] < read.len &&
-			    pos2[2][i + 1] != read.len){
+			    pos2[1][i + 1] - pos2[1][i + 1 - n] < read->len &&
+			    pos2[2][i + 1] != read->len){
 				++i;
 				++n;
 			}
@@ -1483,19 +1455,19 @@ void get_position(Read_inf read, Candidate *r, unsigned short str, short space)
 
 	free(pos2[2]);
 	if (str == 1)
-		reverse_str(read.seq, read.len);
+		reverse_str(read->seq, read->len);
 	return;
 
 exit:
 	r->n[str] = 0;
-	r->err[str] = read.len;
+	r->err[str] = read->len;
 	if (str == 1)
-		reverse_str(read.seq, read.len);
+		reverse_str(read->seq, read->len);
 	return;
 }
 
 unsigned int get_position2(Candidate *r, unsigned short str,
-					 Read_inf read, int type)
+					 struct read_inf *read, int type)
 {
 	unsigned int i, k, n, ret;
 	Cigar *cigar, *tmp;
@@ -1510,12 +1482,12 @@ unsigned int get_position2(Candidate *r, unsigned short str,
 	ret = r->n[str];
 	if (ret == 0){
 		if (type > 0)
-			reverse_str(read.seq, read.len);
+			reverse_str(read->seq, read->len);
 
 		ret = re_mapSW(r, str, read, type);
 
 		if (type > 0)
-			reverse_str(read.seq, read.len);
+			reverse_str(read->seq, read->len);
 	}
 
 	if (ret > 0){
@@ -1529,11 +1501,11 @@ unsigned int get_position2(Candidate *r, unsigned short str,
 	return ret;
 }
 
-void re_map(Candidate *r, Read_inf read1, Read_inf read2)
+void re_map(Candidate *r, struct read_inf *read1, struct read_inf *read2)
 {
 	unsigned int ret, i;
 
-	reverse_str(read2.seq, read2.len);
+	reverse_str(read2->seq, read2->len);
 
 	i = 0;
 	if (r->err[0] < r->err[1])
@@ -1546,10 +1518,10 @@ void re_map(Candidate *r, Read_inf read1, Read_inf read2)
 
 	if (ret > 0)
 		r->pair = 2;
-	reverse_str(read2.seq, read2.len);
+	reverse_str(read2->seq, read2->len);
 }
 
-void intersect2(Candidate *r, Read_inf read1, Read_inf read2, unsigned int add)
+void intersect2(Candidate *r, struct read_inf *read1, struct read_inf *read2, unsigned int add)
 {
 	unsigned int i, k, j, m, n, dis;
 
@@ -1560,7 +1532,7 @@ void intersect2(Candidate *r, Read_inf read1, Read_inf read2, unsigned int add)
 		} else if (r->pos[0][i] > r->pos[1][k]){
 			++k;
 		} else {
-			dis = ABS(r->p[0][i] - r->p[1][k]);
+			dis = _abs(r->p[0][i] - r->p[1][k]);
 			if (dis <= add || add == 0) {
 				++n;
 				r->pos[0][n - 1] = r->pos[0][i];
@@ -1591,10 +1563,10 @@ void intersect2(Candidate *r, Read_inf read1, Read_inf read2, unsigned int add)
 
 void add_class(Candidate *r, unsigned int pair)
 {
-	pthread_mutex_lock(&LOCK);
+	pthread_mutex_lock(&LOCK_CLASS);
 	++PAIRED;
 	if (pair == 1)
-		MEAN_FRAG += ABS(r->p[0][0] - r->p[1][0]);
+		MEAN_FRAG += _abs(r->p[0][0] - r->p[1][0]);
 
 	if (r->n[0] == 1) {
 		++REF_INF->count[r->pos[0][0]];
@@ -1626,7 +1598,7 @@ void add_class(Candidate *r, unsigned int pair)
 			++CLASS->cls[i - 1].count;
 		}
 	}
-	pthread_mutex_unlock(&LOCK);
+	pthread_mutex_unlock(&LOCK_CLASS);
 }
 
 void concate_candidate(Candidate *r1, Candidate *r2)
@@ -1688,7 +1660,7 @@ void swap_candidate(Candidate *r1, unsigned int p1,
 	r2->cigar[p2] = tmp_cigar;
 }
 
-void check_in_transcriptome(Read_inf r1, Read_inf r2, Candidate *r[])
+void check_in_transcriptome(struct read_inf *r1, struct read_inf *r2, Candidate *r[])
 {
 	unsigned int ret;
 
@@ -1722,7 +1694,7 @@ void check_in_transcriptome(Read_inf r1, Read_inf r2, Candidate *r[])
 		ret = get_position2(r[1], 1, r1, 1);
 }
 
-void check_in_genome(Read_inf r1, Read_inf r2, Candidate *r[])
+void check_in_genome(struct read_inf *r1, struct read_inf *r2, Candidate *r[])
 {
 	if (FMINDEX == NULL)
 		return;
@@ -1741,10 +1713,11 @@ void check_in_genome(Read_inf r1, Read_inf r2, Candidate *r[])
 		genome_map(r1, r2, r);
 }
 
-void align_read(Read_inf r1, Read_inf r2, char *stream, unsigned int *slen)
+void align_pair_read(struct read_inf *r1, struct read_inf *r2, 
+		     char *stream, unsigned int *slen)
 {
-	if (r1.name == NULL || r2.name == NULL ||
-		 r1.seq == NULL || r2.seq == NULL)
+	if (r1->name == NULL || r2->name == NULL ||
+		 r1->seq == NULL || r2->seq == NULL)
 		return;
 
 	// Get position of each read
@@ -1766,90 +1739,81 @@ void align_read(Read_inf r1, Read_inf r2, char *stream, unsigned int *slen)
 
 	check_in_genome(r1, r2, r);
 
-	if ((r[0]->pair&1) == 0 && r[0]->n[0] > 0 && r[0]->n[1] > 0)
-		store_fusion(r[0], r1, r2);
-	if ((r[1]->pair&1) == 0 && r[1]->n[0] > 0 && r[1]->n[1] > 0)
-		store_fusion(r[1], r2, r1);
-
 	if (r[0]->pair > 1 && r[1]->pair > 1) {
-		reverse_str(r2.seq, r2.len);
-		reverse_qual(r2.qual, r2.len);
+		reverse_str(r2->seq, r2->len);
+		reverse_qual(r2->qual, r2->len);
 		bam_write_pair(r1, r2, r[0], 1, 1, 0, 1, stream, slen);
-		reverse_str(r2.seq, r2.len);
-		reverse_qual(r2.qual, r2.len);
-		reverse_str(r1.seq, r1.len);
-		reverse_qual(r1.qual, r1.len);
+		reverse_str(r2->seq, r2->len);
+		reverse_qual(r2->qual, r2->len);
+		reverse_str(r1->seq, r1->len);
+		reverse_qual(r1->qual, r1->len);
 		bam_write_pair(r2, r1, r[1], 1, 0, 0, 1, stream, slen);
 		if ((r[0]->pair & 1) + (r[1]->pair & 1) == 0){
 			concate_candidate(r[0], r[1]);
 			add_class(r[0], 1);
                 }
 	} else if (r[0]->pair > 1) {
-		reverse_str(r2.seq, r2.len);
-		reverse_qual(r2.qual, r2.len);
+		reverse_str(r2->seq, r2->len);
+		reverse_qual(r2->qual, r2->len);
 		bam_write_pair(r1, r2, r[0], 1, 1, 0, 1, stream, slen);
 		if ((r[0]->pair & 1) == 0)
 			add_class(r[0], 1);
 	} else if (r[1]->pair > 1){
-		reverse_str(r1.seq, r1.len);
-		reverse_qual(r1.qual, r1.len);
+		reverse_str(r1->seq, r1->len);
+		reverse_qual(r1->qual, r1->len);
 		bam_write_pair(r2, r1, r[1], 1, 0, 0, 1, stream, slen);
 		if ((r[1]->pair & 1) == 0)
 			add_class(r[1], 1);
 	} else if (r[0]->n[0] > 0 && r[0]->n[1] > 0 && 
 		r[0]->err[0] + r[0]->err[1] < r[1]->err[0] + r[1]->err[1]){
-		reverse_str(r2.seq, r2.len);
-		reverse_qual(r2.qual, r2.len);
+		reverse_str(r2->seq, r2->len);
+		reverse_qual(r2->qual, r2->len);
 		bam_write_pair(r1, r2, r[0], 0, 1, 0, 1, stream, slen);
 	} else if (r[1]->n[0] > 0 && r[1]->n[1] > 0){
-		reverse_str(r1.seq, r1.len);
-		reverse_qual(r1.qual, r1.len);
+		reverse_str(r1->seq, r1->len);
+		reverse_qual(r1->qual, r1->len);
 		bam_write_pair(r2, r1, r[1], 0, 0, 0, 1, stream, slen);
 	} else if (r[0]->n[0] > 0 && r[1]->n[0] > 0 &&
                         (r[0]->pair & 1) == (r[1]->pair & 1)){
 		swap_candidate(r[0], 1, r[1], 0);
 		r[0]->pair = -10;
-		if ((r[0]->pair & 1) == 0)
-			store_fusion(r[0], r1, r2);
 		bam_write_pair(r1, r2, r[0], 0, 1, 0, 0, stream, slen);
 	} else if (r[0]->n[1] > 0 && r[1]->n[1] > 0 &&
                         (r[0]->pair & 1) == (r[1]->pair & 1)){
-		reverse_str(r1.seq, r1.len);
-		reverse_qual(r1.qual, r1.len);
-		reverse_str(r2.seq, r2.len);
-		reverse_qual(r2.qual, r2.len);
+		reverse_str(r1->seq, r1->len);
+		reverse_qual(r1->qual, r1->len);
+		reverse_str(r2->seq, r2->len);
+		reverse_qual(r2->qual, r2->len);
 		swap_candidate(r[0], 0, r[1], 1);
 		r[0]->pair = -20;
-		if ((r[0]->pair & 1) == 0)
-			store_fusion(r[0], r1, r2);
 		bam_write_pair(r1, r2, r[0], 0, 0, 1, 1, stream, slen);
 	} else if (r[0]->n[0] > 0){
 		bam_write_pair(r1, r2, r[0], 0, 1, 0, 0, stream, slen);
 	} else if (r[0]->n[1] > 0){
-		reverse_str(r2.seq, r2.len);
-		reverse_qual(r2.qual, r2.len);
+		reverse_str(r2->seq, r2->len);
+		reverse_qual(r2->qual, r2->len);
 		bam_write_pair(r1, r2, r[0], 0, 1, 0, 1, stream, slen);
 	} else if (r[1]->n[0] > 0){
 		bam_write_pair(r2, r1, r[1], 0, 0, 0, 0, stream, slen);
 	} else {
-		reverse_str(r1.seq, r1.len);
-		reverse_qual(r1.qual, r1.len);
+		reverse_str(r1->seq, r1->len);
+		reverse_qual(r1->qual, r1->len);
 		bam_write_pair(r2, r1, r[1], 0, 0, 0, 1, stream, slen);
 	}
 
 	if (r[0]->n[0] > 0 || r[0]->n[1] > 0 || r[1]->n[0] > 0 ||r[1]->n[1] > 0){
-		pthread_mutex_lock(&LOCK);
+		pthread_mutex_lock(&LOCK_CNT);
 		++MAPPED;
-		pthread_mutex_unlock(&LOCK);
+		pthread_mutex_unlock(&LOCK_CNT);
 	}
 
 	destroy_candidate(r[0]);
 	destroy_candidate(r[1]);
 }
 
-void align_read2(Read_inf read, char *stream, unsigned int *slen)
+void align_single_read(struct read_inf *read, char *stream, unsigned int *slen)
 {
-	if (read.name == NULL || read.seq == NULL)
+	if (read->name == NULL || read->seq == NULL)
 		return;
 
 	Candidate *r;
@@ -1867,8 +1831,8 @@ void align_read2(Read_inf read, char *stream, unsigned int *slen)
 	if (r->n[0] > 0){
 		bam_write_single(read, r, 0, 0, stream, slen);
 	} else if (r->n[1] > 0){
-		reverse_str(read.seq, read.len);
-		reverse_qual(read.qual, read.len);
+		reverse_str(read->seq, read->len);
+		reverse_qual(read->qual, read->len);
 		bam_write_single(read, r, 1, 1, stream, slen);
 	}
 
@@ -1888,99 +1852,90 @@ void align_read2(Read_inf read, char *stream, unsigned int *slen)
 	destroy_candidate(r);
 }
 
-unsigned int get_reads(Read_inf *read1, Read_inf *read2)
+void *align_pool_pair(void *thr_data)
 {
-	pthread_mutex_lock(&LOCK);
-	int l1, l2;
-	unsigned int n;
-	
-	n = 0;
-	while (n < GROUP){
-		l1 = kseq_read(R1);
-		l2 = kseq_read(R2);
-		while (l1 == -2 || l2 == -2){
-			++N_READ;
-			l1 = kseq_read(R1);
-			l2 = kseq_read(R2);
-		}
-		if (l1 == -1 || l2 == -1)
-			break;
-
-		++N_READ;
-		MEAN_LEN += l1 + l2;
-
-		read1[n].seq = R1->seq.s;
-		read1[n].len = R1->seq.l;
-		read1[n].name = R1->name.s;
-		read1[n].qual = R1->qual.s;
-		read2[n].seq = R2->seq.s;
-		read2[n].len = R2->seq.l;
-		read2[n].qual = R2->qual.s;
-		read2[n].name = R2->name.s;
-
-		R1->seq.s = R2->seq.s = 0;
-		R1->qual.s = R2->qual.s = R1->name.s = R2->name.s = 0;
-		R1->qual.m = R2->qual.m = R1->name.m = R2->name.m = 0;
-		++n;
-	}
-
-	printf("\t\rNumber of processed pairs\t: %u", N_READ);
-	fflush(stdout);
-	if ((l1 == -1 || l2 == -1) && l1 != l2)
-		fprintf(stderr, "\n[WARNING] Number of reads in two files are not equal.\n");
-	pthread_mutex_unlock(&LOCK);
-	return n;
-}
-
-unsigned int get_reads_single(Read_inf *read)
-{
-	pthread_mutex_lock(&LOCK);
-	int l;
-	unsigned int n;
-	
-	n = 0;
-	while (n < GROUP){
-		l = kseq_read(R1);
-		while (l == -2)
-			l = kseq_read(R1);
-		if (l == -1)
-			break;
-
-		++N_READ;
-		MEAN_LEN += l;
-
-		read[n].seq = R1->seq.s;
-		read[n].len = R1->seq.l;
-		read[n].name = R1->name.s;
-		read[n].qual = R1->qual.s;
-
-		R1->seq.s = R1->qual.s = R1->name.s = 0;
-		R1->qual.m = R1->name.m = 0;
-		++n;
-	}
-
-	printf("\t\rNumber of processed reads\t: %u", N_READ);
-	fflush(stdout);
-	pthread_mutex_unlock(&LOCK);
-	return n;
-}
-
-void *align_pool(void *data)
-{
-	unsigned int i, n;
-	Read_inf read1[GROUP];
-	Read_inf read2[GROUP];
+	struct gb_pair_data *data = (struct gb_pair_data *) thr_data;
+	struct gb_pair_buf *buffer;
+	struct read_inf *left_read = malloc(sizeof(struct read_inf));
+	struct read_inf *right_read = malloc(sizeof(struct read_inf));
+	int32_t left_pos, right_pos, ret_code1, ret_code2;
+	int32_t n_read = 0;
+	int32_t len_read = 0;
 	char *stream = malloc(MAX_COMPRESS);
-	unsigned int slen = 0;
+	uint32_t slen = 0;
 
-	do {
-		n = get_reads(read1, read2);
-		for (i = 0; i < n; ++i){
-			align_read(read1[i], read2[i], stream, &slen);
-			destroy_readInf(read1[i]);
-			destroy_readInf(read2[i]);
+	while (1) {
+		pthread_mutex_lock(&LOCK);
+		buffer = gb_get_pair(data);
+		pthread_mutex_unlock(&LOCK);
+		if (buffer->left == NULL && buffer->right == NULL) {
+			break;
+		} else if (buffer->left == NULL || buffer->right == NULL) {
+			data->warning_flag = true;
+			break;
 		}
-	} while (n > 0);
+
+		left_pos = right_pos = n_read = len_read = 0;
+		while (1) {
+			ret_code1 = data->format == TYPE_FASTQ ? 
+				    get_read_from_fq_buffer(left_read, 
+						buffer->left, &left_pos) :
+				    get_read_from_fa_buffer(left_read, 
+						buffer->left, &left_pos);
+
+			if (ret_code1 == READ_FAIL) {
+				_verbose("\n");
+				_error("Wrong format of file: %s\n",
+				      data->left->file_name);
+			}
+
+			ret_code2 = data->format == TYPE_FASTQ ? 
+				    get_read_from_fq_buffer(right_read, 
+						buffer->right, &right_pos) :
+				    get_read_from_fa_buffer(right_read, 
+						buffer->right, &right_pos);
+			if (ret_code2 == READ_FAIL) {
+				_verbose("\n");
+				_error("Wrong format of file: %s\n",
+				      data->right->file_name);
+			}
+
+			// fake quality string for output bam of fasta type
+			// FIXME: importance bug!!!!!!!!!!
+			if (data->format == TYPE_FASTA) {
+				int32_t i;
+				left_read->qual = malloc(left_read->len + 1);
+				for (i = 0; i < left_read->len; ++i)
+					left_read->qual[i] = 'A';
+				right_read->qual = malloc(right_read->len + 1);
+				for (i = 0; i < right_read->len; ++i)
+					right_read->qual[i] = 'A';
+				left_read->qual[left_read->len] = 
+				right_read->qual[right_read->len] = 0;
+			}
+
+			n_read++;
+			len_read += left_read->len + right_read->len;
+			align_pair_read(left_read, right_read, stream, &slen);
+			
+			// free fake quality string
+			if (data->format == TYPE_FASTA) {
+				free(left_read->qual);
+				free(right_read->qual);
+			}
+
+			if (ret_code1 || ret_code2 == READ_END)
+				break;
+		}
+
+		pthread_mutex_lock(&LOCK_CNT);
+		N_READ += n_read;
+		MEAN_LEN += len_read;
+		_verbose("\rNumber of processed read pairs: %u", N_READ);
+		pthread_mutex_unlock(&LOCK_CNT);
+
+		gb_destroy_pair_buf(buffer);
+	};
 
 	if (slen > 0 && WRITE_BAM == 0)
 		bam_write(BAM, stream, slen);
@@ -1990,20 +1945,66 @@ void *align_pool(void *data)
 	return NULL;
 }
 
-void *align_pool2(void *data)
+void *align_pool_single(void *thr_data)
 {
-	unsigned int i, n;
-	Read_inf read[GROUP];
+	struct gb_single_data *data = (struct gb_single_data *) thr_data;
+	struct gb_single_buf *buffer;
+	struct read_inf *single_read = malloc(sizeof(struct read_inf));
+	int32_t single_pos, ret_code;
+	int32_t n_read = 0;
+	int32_t len_read = 0;
 	char *stream = malloc(MAX_COMPRESS);
-	unsigned int slen = 0;
+	uint32_t slen = 0;
 
-	do {
-		n = get_reads_single(read);
-		for (i = 0; i < n; ++i){
-			align_read2(read[i], stream, &slen);
-			destroy_readInf(read[i]);
+	while (1) {
+		pthread_mutex_lock(&LOCK);
+		buffer = gb_get_single(data);
+		pthread_mutex_unlock(&LOCK);
+		if (buffer->single == NULL)
+			break;
+		
+		single_pos = n_read = len_read = 0;
+		while (1) {
+			ret_code = data->format == TYPE_FASTQ ? 
+				    get_read_from_fq_buffer(single_read, 
+						buffer->single, &single_pos) :
+				    get_read_from_fa_buffer(single_read, 
+						buffer->single, &single_pos);
+
+			if (ret_code == READ_FAIL)
+				_error("Wrong format of file: %s\n",
+				      data->single->file_name);
+
+			// fake quality string for output bam of fasta type
+			// FIXME: importance bug!!!!!!!!!!
+			if (data->format == TYPE_FASTA) {
+				int32_t i;
+				single_read->qual = malloc(single_read->len + 1);
+				for (i = 0; i < single_read->len; ++i)
+					single_read->qual[i] = 'A';
+				single_read->qual[single_read->len] = 0;
+			}
+
+			n_read++;
+			len_read += single_read->len;
+			align_single_read(single_read, stream, &slen);
+			
+			// free fake quality string
+			if (data->format == TYPE_FASTA)
+				free(single_read->qual);
+
+			if (ret_code == READ_END)
+				break;
 		}
-	} while (n > 0);
+
+		pthread_mutex_lock(&LOCK_CNT);
+		N_READ += n_read;
+		MEAN_LEN += len_read;
+		_verbose("\rNumber of processed reads: %u", N_READ);
+		pthread_mutex_unlock(&LOCK_CNT);
+
+		gb_destroy_single_buf(buffer);
+	};
 
 	if (slen > 0 && WRITE_BAM == 0)
 		bam_write(BAM, stream, slen);
@@ -2013,72 +2014,63 @@ void *align_pool2(void *data)
 	return NULL;
 }
 
-void get_alignment_pair(char *fq1, char *fq2)
+void get_alignment_pair(char *left_file, char *right_file, int32_t nThread)
 {
-	unsigned int i, k, rc;
-	gzFile *input1, *input2;
-	pthread_t thr[NTHREAD];
+	_verbose("Process pair: %s\n"
+		 "              %s\n", left_file, right_file);
+	_log("Process pair: %s\n"
+	     "              %s\n\n", left_file, right_file);
+	
+	struct gb_pair_data *gb_pair_data;
+	gb_pair_data = gb_init_pair(left_file, right_file);
+
+	pthread_t *thr = calloc(nThread, sizeof(pthread_t));
 	pthread_attr_t attr;
-
-	input1 = gzopen(fq1, "r");
-	if (!input1) {
-		ERROR_PRINT("Can not open file %s\nExit.\n", fq1);
-		exit(EXIT_FAILURE);
-	}
-
-	input2 = gzopen(fq2, "r");
-	if (!input2) {
-		ERROR_PRINT("Can not open file %s\nExit.\n", fq2);
-		exit(EXIT_FAILURE);
-	}
-
-	// Initialize
-	R1 = kseq_init(input1);
-	R2 = kseq_init(input2);
-	memset(&thr, '\0', NTHREAD);
 	pthread_attr_init(&attr);
-	pthread_attr_setstacksize(&attr, STACK_SIZE);
+	pthread_attr_setstacksize(&attr, THREAD_STACK_SIZE);
 	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
 
-	for (i = 0; i < NTHREAD; ++i) 
-		rc = pthread_create(&thr[i], &attr, align_pool, NULL);
-	for (; i > 0; --i)
-		rc = pthread_join(thr[i - 1], NULL);
-	pthread_attr_destroy(&attr);
+	unsigned int i, rc;
 
-	gzclose(input1);
-	gzclose(input2);
-	kseq_destroy(R1);
-	kseq_destroy(R2);
+	for (i = 0; i < nThread; ++i) 
+		rc = pthread_create(&thr[i], &attr, 
+			            align_pool_pair, gb_pair_data);
+	for (i = 0; i < nThread; ++i)
+		rc = pthread_join(thr[i], NULL);
+
+	if (gb_pair_data->warning_flag) {
+		_verbose("\n");
+		_warning("Number of reads in two file are not equal");
+	}
+
+	free(thr);
+	pthread_attr_destroy(&attr);
+	gb_destroy_pair_data(gb_pair_data);
 }
 
-void get_alignment(char *fq)
+void get_alignment_single(char *single_file, int32_t nThread)
 {
-	unsigned int i, k, rc;
-	kseq_t *r;
-	gzFile *input;
-	pthread_t thr[NTHREAD];
+	_verbose("Process file: %s\n", single_file);
+	_log("Process file: %s\n\n", single_file);
+
+	struct gb_single_data *gb_single_data;
+	gb_single_data = gb_init_single(single_file);
+
+	pthread_t *thr = calloc(nThread, sizeof(pthread_t));
 	pthread_attr_t attr;
-
-	input = gzopen(fq, "r");
-	if (!input) {
-		ERROR_PRINT("Can not open file %s\nExit.\n", fq);
-		exit(EXIT_FAILURE);
-	}
-
-	// Initialize
-	R1 = kseq_init(input);
-	memset(&thr, '\0', NTHREAD);
 	pthread_attr_init(&attr);
-	pthread_attr_setstacksize(&attr, STACK_SIZE);
+	pthread_attr_setstacksize(&attr, THREAD_STACK_SIZE);
 	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
 
-	for (i = 0; i < NTHREAD; ++i) 
-		rc = pthread_create(&thr[i], &attr, align_pool2, NULL);
-	for (; i > 0; --i)
-		rc = pthread_join(thr[i - 1], NULL);
-	pthread_attr_destroy(&attr);
+	unsigned int i, rc;
 
-	gzclose(input);
-	kseq_destroy(R1);
+	for (i = 0; i < nThread; ++i) 
+		rc = pthread_create(&thr[i], &attr,
+				    align_pool_single, gb_single_data);
+	for (i = 0; i < nThread; ++i)
+		rc = pthread_join(thr[i], NULL);
+
+	free(thr);
+	pthread_attr_destroy(&attr);
+	gb_destroy_single_data(gb_single_data);
 }

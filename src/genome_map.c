@@ -1,4 +1,5 @@
 #include "hash_align.h"
+#include "macros.h"
 
 void g_add_sort(unsigned int **arr, unsigned int value, unsigned int idx,
 				        unsigned int *i, unsigned int *k)
@@ -39,7 +40,7 @@ void g_merge_sort(unsigned int **arr1,  unsigned int n1,
 	arr1[1] = new_arr[1];
 }
 
-void g_get_SWalign(Read_inf read, unsigned int **pos, unsigned int id, 
+void g_get_SWalign(struct read_inf *read, unsigned int **pos, unsigned int id, 
 		unsigned int n, unsigned int *store, unsigned int *max,
 					Candidate *r, unsigned int str)
 {
@@ -47,24 +48,24 @@ void g_get_SWalign(Read_inf read, unsigned int **pos, unsigned int id,
 	int start, score, skip, err, sub, ref_start;
 	Cigar *cigar, *tmp;
 
-	if (n > 1 && pos[0][id + n -1] - pos[0][id] > read.len)
+	if (n > 1 && pos[0][id + n -1] - pos[0][id] > read->len)
 		return;
 
 	p = pos[1][id] >> HBLOCK;
 	ref_start = pos[0][id] - p;
 
-	if (ref_start < 0 || ref_start + read.len > FMINDEX->n)
+	if (ref_start < 0 || ref_start + read->len > FMINDEX->n)
 		return;
 
 	add = ref_start < ERR? ref_start: ERR;
 	err = sub = 0;
 
 	if (p > 0){
-		cigar = SW_align(FMINDEX->seq, ref_start - add, read.seq,
+		cigar = SW_align(FMINDEX->seq, ref_start - add, read->seq,
 				p + add, p, &score, p < 2*ERR? -3 : -ERR);
                 err += score; 
 
-		if (err > read.len/2 || err > *max){
+		if (err > read->len/2 || err > *max){
 			free_cigar(cigar);
 			return;
 		}
@@ -89,18 +90,18 @@ void g_get_SWalign(Read_inf read, unsigned int **pos, unsigned int id,
 						(pos[1][id + i] & 0xffff), NULL);
 
 		start = (pos[1][id + i] >> HBLOCK) + (pos[1][id + i] & 0xffff);
-		if (start >= read.len)
+		if (start >= read->len)
 			break;
 
 		len = ((i + 1) < n? pos[1][id + i + 1] >> HBLOCK :
-							    read.len) - start;
+							    read->len) - start;
 		add = (i + 1) < n? 0: ERR;
 		tmp = SW_align(FMINDEX->seq, ref_start + start,
-			        read.seq + start, len, len, &score,
+			        read->seq + start, len, len, &score,
 				     	      len < 2*ERR? 3: ERR);
 		err += score;
 
-		if (err > read.len/2 || err > *max + 1){
+		if (err > read->len/2 || err > *max + 1){
 			free_cigar(tmp);
 			free_cigar(cigar);
 			return;
@@ -110,7 +111,7 @@ void g_get_SWalign(Read_inf read, unsigned int **pos, unsigned int id,
 		free_cigar(tmp);
 	}
 
-	if (*max == read.len/2 || err < *max){
+	if (*max == read->len/2 || err < *max){
 		tmp = r->cigar[str];
 		r->cigar[str] = cigar;
 		cigar = tmp;
@@ -124,13 +125,13 @@ void g_get_SWalign(Read_inf read, unsigned int **pos, unsigned int id,
 	free_cigar(cigar);
 }
 
-void g_intersect(Candidate *r, Read_inf read1, Read_inf read2, unsigned int add)
+void g_intersect(Candidate *r, struct read_inf *read1, struct read_inf *read2, unsigned int add)
 {
 	unsigned int i, k, j, m, n, dis;
 
 	i = k = n = 0;
 	while (i < r->n[0] && k < r->n[1]) {
-		dis = ABS(r->pos[0][i] - r->pos[1][k]);
+		dis = _abs(r->pos[0][i] - r->pos[1][k]);
 		if (dis > add && r->pair > 1)
 			dis -= r->pair - 1;
 		if (dis <= add) {
@@ -213,7 +214,7 @@ void insert_padding(Cigar *cigar, unsigned int len, unsigned int pos)
 	++cigar->n_cigar;
 }
 
-unsigned int check_split(Read_inf read, Candidate *r, unsigned short str)
+unsigned int check_split(struct read_inf *read, Candidate *r, unsigned short str)
 {
 	unsigned int n = r->cigar[str]->n_cigar - 1;
 	if (r->cigar[str]->type[0] != SCLIP &&
@@ -228,13 +229,13 @@ unsigned int check_split(Read_inf read, Candidate *r, unsigned short str)
 		len = r->cigar[str]->count[0];
 	} else {
 		len = r->cigar[str]->count[n];
-		p = read.len - len;
+		p = read->len - len;
 	}
 
 	if (len < KMER)
 		return 1;
 
-	l = query(read.seq + p, len, FMINDEX, &range);
+	l = query(read->seq + p, len, FMINDEX, &range);
 	end = (unsigned int) range;
         start = (unsigned int) (range >> BLOCK);
 
@@ -252,17 +253,17 @@ unsigned int check_split(Read_inf read, Candidate *r, unsigned short str)
 	return ret + 1;
 }
 
-void g_get_position(Read_inf read, Candidate *r, unsigned short str, short space)
+void g_get_position(struct read_inf *read, Candidate *r, unsigned short str, short space)
 {
 	unsigned int i, k, len, add, max, start, end, pidx;
 	unsigned long idx, pos;
 	unsigned int *pos1[2], *pos2[2], n1, n2, n;
 
 	if (str == 1)
-		reverse_str(read.seq, read.len);
+		reverse_str(read->seq, read->len);
 
-	for (i = n1 = n2 = len = 0; i + KMER <= read.len; i += space){
-		len = query(read.seq, read.len - i, FMINDEX, &pos);
+	for (i = n1 = n2 = len = 0; i + KMER <= read->len; i += space){
+		len = query(read->seq, read->len - i, FMINDEX, &pos);
 
 		end = (unsigned int) pos;
                 start = (unsigned int) (pos >> BLOCK);
@@ -272,7 +273,7 @@ void g_get_position(Read_inf read, Candidate *r, unsigned short str, short space
 			continue;
 
 		pos1[0] = FMINDEX->sa + start;
-		pidx = (read.len - i - len) << HBLOCK | len;
+		pidx = (read->len - i - len) << HBLOCK | len;
 
 		if (n2 == 0){
 			n2 = n1;
@@ -286,7 +287,7 @@ void g_get_position(Read_inf read, Candidate *r, unsigned short str, short space
 			n1 = 0;
 		}
 		
-                if (len == read.len)
+                if (len == read->len)
                         break;
 
 		if (n1 == 0)
@@ -299,7 +300,7 @@ void g_get_position(Read_inf read, Candidate *r, unsigned short str, short space
 
 	n1 = 0;
 	if (r->n[1 - str] > 0 && space < KMER){
-		for (i = k = 0, max = read.len/2; i < n2; ++i){
+		for (i = k = 0, max = read->len/2; i < n2; ++i){
 			if (pos2[0][i] + 2*MAX_FRAG < r->pos[1 - str][k])
 				continue;
 			while (pos2[0][i] > r->pos[1 - str][k] + 2*MAX_FRAG &&
@@ -312,7 +313,7 @@ void g_get_position(Read_inf read, Candidate *r, unsigned short str, short space
 			n = 1;
 			while (i + 1 < n2 && (pos2[1][i + 1] >> HBLOCK) >
 						(pos2[1][i] >> HBLOCK) &&
-                    	  pos2[0][i + 1] - pos2[0][i + 1 - n] < read.len){
+                    	  pos2[0][i + 1] - pos2[0][i + 1 - n] < read->len){
 				++i;
 				++n;
 			}
@@ -320,12 +321,12 @@ void g_get_position(Read_inf read, Candidate *r, unsigned short str, short space
 			g_get_SWalign(read, pos2, i + 1 - n, n, &n1,
 						      &max, r, str);
 		}
-	} else if (len < read.len && n2 > 0){
-                for (i = 0, max = read.len/2; i < n2; ++i){
+	} else if (len < read->len && n2 > 0){
+                for (i = 0, max = read->len/2; i < n2; ++i){
                         n = 1;
 			while (i + 1 < n2 && (pos2[1][i + 1] >> HBLOCK) >
 						(pos2[1][i] >> HBLOCK) &&
-                         pos2[0][i + 1] - pos2[0][i + 1 - n] < read.len){
+                         pos2[0][i + 1] - pos2[0][i + 1 - n] < read->len){
                                 ++i;
                                 ++n;
                         }
@@ -339,7 +340,7 @@ void g_get_position(Read_inf read, Candidate *r, unsigned short str, short space
         } else if (n2 > 0) {
                 n1 = n2;
                 r->cigar[str] = init_cigar();
-                add_cigar(r->cigar[str], MATCH, read.len, NULL);
+                add_cigar(r->cigar[str], MATCH, read->len, NULL);
                 max = 0;
         }
 
@@ -350,9 +351,9 @@ void g_get_position(Read_inf read, Candidate *r, unsigned short str, short space
                 r->pos[str] = pos2[0];
                 r->p[str] = calloc(1, sizeof(int));
                 r->err[str] = max;
-		r->pair = MAX2(r->pair, check_split(read, r, str));
+		r->pair = _max(r->pair, check_split(read, r, str));
 	} else {
-                r->err[str] = read.len;
+                r->err[str] = read->len;
 		if (n2 > 0)
                 	free(pos2[0]);
         }
@@ -361,11 +362,11 @@ void g_get_position(Read_inf read, Candidate *r, unsigned short str, short space
         	free(pos2[1]);
 
 	if (str == 1)
-		reverse_str(read.seq, read.len);
+		reverse_str(read->seq, read->len);
 	return;
 }
 
-void mate_pair(Read_inf r1, Read_inf r2, Candidate *r)
+void mate_pair(struct read_inf *r1, struct read_inf *r2, Candidate *r)
 {
 	if (r->n[0] == 0 && r->n[1] > 0 && r->err[1] < ERR)
 		g_get_position(r1, r, 0, KMER/2);
@@ -376,7 +377,7 @@ void mate_pair(Read_inf r1, Read_inf r2, Candidate *r)
 		g_intersect(r, r1, r2, MAX_FRAG);
 }
 
-void genome_map(Read_inf r1, Read_inf r2, Candidate *r[])
+void genome_map(struct read_inf *r1, struct read_inf *r2, Candidate *r[])
 {
 	Candidate *r_tmp[2];
 	r_tmp[0] = init_candidate();

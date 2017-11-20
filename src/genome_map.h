@@ -4,6 +4,6 @@
 #include "hash_align.h"
 #include "fmindex.h"
 
-void genome_map(Read_inf r1, Read_inf r2, Candidate *r[]);
+void genome_map(struct read_inf *r1, struct read_inf *r2, Candidate *r[]);
 
 #endif

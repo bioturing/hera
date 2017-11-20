@@ -1,5 +1,7 @@
 #include "EM.h"
 
+static int32_t bootstrap_cnt = 0;
+
 /******************************************************************************
  * ************************************************************************** *
  * *                               HDF5 WRITE                               * *
@@ -147,36 +149,8 @@ void *bootstrap_sample(void *data)
 	return NULL;
 }
 
-void write_fusion()
-{
-	unsigned long i;
-	unsigned int k, rc;
-	char *seq;
-	pthread_t thr[NTHREAD];
-	memset(&thr, '\0', NTHREAD);
-	pthread_attr_t attr;
-	pthread_attr_init(&attr);
-	pthread_attr_setstacksize(&attr, STACK_SIZE);
-	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
-
-	fprintf(OUT_FUSION, "#left_chr\tleft_break\tleft_gene\tright_chr\tright_break\tright_gene\tfusion_seq\n");
-	for (i = 0; i < FUSION->n;){
-		for (k = 0; k < NTHREAD && i < FUSION->n; ++i) {
-			if (FUSION->detail[i].n < 2)
-				continue;
-			rc = pthread_create(&thr[k], &attr,
-					assembly_fusion, (void*)i);
-			++k;
-		}
-
-		for (; k > 0; --k)
-			rc = pthread_join(thr[k - 1], NULL);
-	}
-	pthread_attr_destroy(&attr);
-}
-
 void write_result(char *out_dir, unsigned int n_bs,
-			 EM_val *em_val, char *prefix)
+		  EM_val *em_val, char *prefix, int32_t nThread)
 {
 	unsigned int i, k, l, v, g, p_len;
 	float sum[2] = {0.0, 0.0};
@@ -230,13 +204,6 @@ void write_result(char *out_dir, unsigned int n_bs,
 	}
 	fclose(out);
 
-	// Fusion
-	if (FUSION->n > 0){
-		memcpy(file_path + l, "fusion.bedpe\0", 13);
-		OUT_FUSION = fopen(file_path, "w");
-		write_fusion();
-	}
-
 	// HDF5
 	if (n_bs > 0) {
 		memcpy(file_path + l, "abundance.h5\0", 13);
@@ -264,21 +231,20 @@ void write_result(char *out_dir, unsigned int n_bs,
 					REF_INF->ref_name, aux, "ids");
 		destroy_emVal(em_val);
 		unsigned int rc, n;
-		pthread_t thr[NTHREAD];
-		memset(&thr, '\0', NTHREAD);
+		pthread_t *thr = calloc(nThread, sizeof(pthread_t));
 		pthread_attr_t attr;
 		pthread_attr_init(&attr);
-		pthread_attr_setstacksize(&attr, STACK_SIZE);
+		pthread_attr_setstacksize(&attr, THREAD_STACK_SIZE);
 		pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
 		create_distribution();
 		bs = H5Gcreate(file_id, "/bootstrap", H5P_DEFAULT,
                                                   H5P_DEFAULT, H5P_DEFAULT);
 
 		for (i = 0, n = 0; i < n_bs;) {
-			for (k = 0; k < NTHREAD && i < n_bs; ++k, ++i) {
+			for (k = 0; k < nThread && i < n_bs; ++k, ++i) {
 				Thread_data3 *data = calloc(1,
                                                       sizeof(Thread_data3));
-				data->order = i;
+				data->order = i + 1;
 				data->bs = &bs;
 				rc = pthread_create(&thr[k], &attr,
                                                     bootstrap_sample, data);
@@ -288,7 +254,7 @@ void write_result(char *out_dir, unsigned int n_bs,
 				rc = pthread_join(thr[k - 1], NULL);
 		}
 		pthread_attr_destroy(&attr);
-
+		free(thr);
 		status = H5Gclose(bs);
 		status = H5Fclose(file_id);
 		status = H5Gclose(root);
@@ -324,7 +290,7 @@ double *M_step(EM_val *em_val, unsigned int *count, unsigned int *stop)
        	                                                 REF_INF->len[i];
 		em_val->overlap[i] = 0.0;
 		if (new_grama[i] > 1e-3){
-			err = ABS(new_grama[i] - em_val->grama[i])/new_grama[i];
+			err = _abs(new_grama[i] - em_val->grama[i])/new_grama[i];
 			max_err = err > max_err? err: max_err;
 			if (max_err > 0.01)
 				*stop = 0;
@@ -406,11 +372,16 @@ EM_val *estimate_count(unsigned int *count, unsigned int order)
 		}
 	}
 
-	if (order == 0)
-		printf("Finish EM with %u rounds\n", k);
-	else
-		printf("Finish bootstrap number %u with %u rounds\n",
-                                                	 order, k);
+	if (order == 0) {
+		_verbose("Finish EM with %u rounds\n", k);
+		_log("Finish EM with %u rounds\n", k);
+	}
+	else {
+		_verbose("Finish bootstrap number %u with %u rounds\n",
+                                                ++bootstrap_cnt, k);
+		_log("Finish bootstrap number %u with %u rounds\n",
+                                                bootstrap_cnt, k);
+	}
 
 	return em_val;
 }

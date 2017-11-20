@@ -184,17 +184,17 @@ inline unsigned int get_qual(unsigned int n)
 	return -10*log10(error);
 }
 
-void compact_inf(Read_inf read, Bam_core *core, unsigned int n_miss,
+void compact_inf(struct read_inf *read, Bam_core *core, unsigned int n_miss,
 						unsigned int name_len)
 {
 	unsigned int add = BLOCK + CHUNK;
 	unsigned int i, len, l;
 
-	l = name_len + CHUNK*core->n_cigar + 3*read.len + add + core->len;
+	l = name_len + CHUNK*core->n_cigar + 3*read->len + add + core->len;
 	core->data = malloc(l);
 
 	// Read name
-	memcpy(core->data + add, read.name, name_len);
+	memcpy(core->data + add, read->name, name_len);
 	len = add + name_len;
 
 	// Cigar
@@ -202,9 +202,9 @@ void compact_inf(Read_inf read, Bam_core *core, unsigned int n_miss,
 	len += CHUNK*core->n_cigar;
 
 	// Sequence
-	for (i = 0, core->data[len] = 0; i < read.len; ++i){
+	for (i = 0, core->data[len] = 0; i < read->len; ++i){
 		core->data[len] = (core->data[len] << CHUNK) |
-				  bam_nt16_table[read.seq[i]];
+				  bam_nt16_table[read->seq[i]];
 		if ((i&1) == 1)
 			core->data[++len] = 0;
 	}
@@ -214,9 +214,9 @@ void compact_inf(Read_inf read, Bam_core *core, unsigned int n_miss,
 	}
 
 	// Quality string
-	for (i = 0; i < read.len; ++i)
-		core->data[len + i] = read.qual[i] - 33;
-	len += read.len;
+	for (i = 0; i < read->len; ++i)
+		core->data[len + i] = read->qual[i] - 33;
+	len += read->len;
 
 	// Tag field
 	if (core->match > 0){
@@ -264,7 +264,7 @@ void destroy_bamCore(Bam_core *core)
 }
 
 void pack_bam_core(Bam_core *core, Candidate *r, unsigned int p,
-		Read_inf read, unsigned int gene, unsigned int name_len)
+		struct read_inf *read, unsigned int gene, unsigned int name_len)
 {
 	unsigned int n;
 	unsigned int convert = r->pair & 1;
@@ -311,19 +311,19 @@ void pack_bam_block(Bam_core *core, Bam_core *mate_core, unsigned int name_len,
 	*slen += core->block_len;
 }
 
-void write_alignment_single(Read_inf read, unsigned int flag, Candidate *r,
+void write_alignment_single(struct read_inf *read, unsigned int flag, Candidate *r,
 			 		 unsigned int p, unsigned int gene,
 					  char *stream, unsigned int *slen)
 {
 	Bam_core *core[2];
-	core[0] = init_bamCore(read.len);
-	core[1] = init_bamCore(read.len);
+	core[0] = init_bamCore(read->len);
+	core[1] = init_bamCore(read->len);
 
 	unsigned int name_len;
 
-	name_len = strlen(read.name);
-	if (name_len > 2 && read.name[name_len - 2] == '/'){
-		read.name[name_len - 2] = '\0';
+	name_len = strlen(read->name);
+	if (name_len > 2 && read->name[name_len - 2] == '/'){
+		read->name[name_len - 2] = '\0';
 		--name_len;
 	} else {
 		++name_len;
@@ -331,27 +331,27 @@ void write_alignment_single(Read_inf read, unsigned int flag, Candidate *r,
 
 	// Assign
 	pack_bam_core(core[0], r, p, read, gene, name_len);
-	pack_bam_block(core[0], core[1], name_len, read.len, flag,
+	pack_bam_block(core[0], core[1], name_len, read->len, flag,
 					  	 0, stream, slen);
 	destroy_bamCore(core[0]);
 	destroy_bamCore(core[1]);
 }
 
-void write_alignment_pair(Read_inf read1, Read_inf read2,
+void write_alignment_pair(struct read_inf *read1, struct read_inf *read2,
 	     unsigned int *flag, Candidate *r, unsigned int gene,
 				char *stream, unsigned int *slen)
 {
 	Bam_core *core[2];
-	core[0] = init_bamCore(read1.len);
-	core[1] = init_bamCore(read2.len);
+	core[0] = init_bamCore(read1->len);
+	core[1] = init_bamCore(read2->len);
 
 	unsigned int name_len;
 	int size = 0;
 
-	name_len = strlen(read1.name);
-	if (name_len > 2 && read1.name[name_len - 2] == '/'){
-		read1.name[name_len - 2] = '\0';
-		read1.name[name_len - 2] = '\0';
+	name_len = strlen(read1->name);
+	if (name_len > 2 && read1->name[name_len - 2] == '/'){
+		read1->name[name_len - 2] = '\0';
+		read1->name[name_len - 2] = '\0';
 		--name_len;
 	} else {
 		++name_len;
@@ -363,23 +363,23 @@ void write_alignment_pair(Read_inf read1, Read_inf read2,
 
 	if (core[0]->ref >= 0 && core[0]->ref == core[1]->ref){
 		if (core[0]->pos < core[1]->pos)
-			size = core[1]->pos + read2.len + core[1]->align_len
+			size = core[1]->pos + read2->len + core[1]->align_len
 							      - core[0]->pos;
 		else
-			size = core[0]->pos + read1.len + core[0]->align_len
+			size = core[0]->pos + read1->len + core[0]->align_len
 							      - core[1]->pos;
 	}
 
-	pack_bam_block(core[0], core[1], name_len, read1.len, flag[0],
+	pack_bam_block(core[0], core[1], name_len, read1->len, flag[0],
 						  size, stream, slen);
-	pack_bam_block(core[1], core[0], name_len, read2.len, flag[1],
+	pack_bam_block(core[1], core[0], name_len, read2->len, flag[1],
 						 -size, stream, slen);
 
 	destroy_bamCore(core[0]);
 	destroy_bamCore(core[1]);
 }
 
-void bam_write_pair(Read_inf read1, Read_inf read2, Candidate *r,
+void bam_write_pair(struct read_inf *read1, struct read_inf *read2, Candidate *r,
 	unsigned int proper, unsigned int first, unsigned int rev,
 	      unsigned int mrev, char *stream, unsigned int *slen)
 {
@@ -415,7 +415,7 @@ void bam_write_pair(Read_inf read1, Read_inf read2, Candidate *r,
 	}
 }
 
-void bam_write_single(Read_inf read, Candidate *r, unsigned int rev,
+void bam_write_single(struct read_inf *read, Candidate *r, unsigned int rev,
 	          unsigned int p, char *stream, unsigned int *slen)
 {
 	if (WRITE_BAM == 1)
@@ -445,7 +445,7 @@ void bam_write_single(Read_inf read, Candidate *r, unsigned int rev,
 	}
 }
 
-void read_header(char *idx_dir, int argc, char *argv[])
+void init_bam_header(char *idx_dir, int argc, char *argv[])
 {
 	char buf[5000], *ref;
 	unsigned int i, len, l;
@@ -465,7 +465,8 @@ void read_header(char *idx_dir, int argc, char *argv[])
 		bam_write(BAM, buf, CHUNK);
 
 	// Command line
-	sprintf(buf, "@HD\tVN:1.0\tSO:unsorted\n@PG\tID:hera\tPN:hera\tVN:%s\tCL:%s%c", VERSION, argv[0], '\0');
+	sprintf(buf, "@HD\tVN:1.0\tSO:unsorted\n@PG\tID:hera\tPN:hera\tVN:%s\tCL:%s%c", 
+		HERA_VERSION, argv[0], '\0');
 	len = strlen(buf);
 	l = len - strlen(argv[0]);
 
@@ -474,8 +475,6 @@ void read_header(char *idx_dir, int argc, char *argv[])
 		len = strlen(buf);
 	}
 	buf[len++] = '\n';
-	fprintf(SUMMARY, "\t\t\t_________%s________\n\nCOMMAND:\n\t%s\n",
-							 VERSION, buf + l);
 
 	// Reference
 	i = fread(&l, 1, sizeof(int), idx);
@@ -493,36 +492,4 @@ void read_header(char *idx_dir, int argc, char *argv[])
 
 	free(ref);
 	fclose(idx);
-}
-
-void init_output(char *idx_dir, char *out_dir, int argc,
-				 char *argv[], char *prefix)
-{
-	unsigned int len, p_len;
-	char *file_path;
-
-	// Make file path
-	len = strlen(out_dir);
-	if (out_dir[len-1] == '/')
-		--len;
-
-	p_len = strlen(prefix);
-
-	file_path = malloc(len + p_len + 17);
-	memcpy(file_path, out_dir, len);
-
-	if (WRITE_BAM == 0){
-		memcpy(file_path + len, "/", 1);
-		memcpy(file_path + len + 1, prefix, p_len);
-		if (p_len > 0)
-			memcpy(file_path + len + 1 + p_len++, "_", 1);
-		memcpy(file_path + len + p_len + 1, "alignment.bam\0", 14);
-		BAM = bam_open(file_path, "wb");
-	}
-	memcpy(file_path + len, "/summary\0", 9);
-	SUMMARY = fopen(file_path, "w");
-
-	read_header(idx_dir, argc, argv);
-
-	free(file_path);
 }

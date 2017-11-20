@@ -7,7 +7,7 @@ import subprocess
 import struct
 
 # Global variant
-# GENOME: { 
+# genome: { 
 #	chr_name: { 
 #		seq: string,
 #		order: integer,
@@ -16,11 +16,12 @@ import struct
 #			transcript_id: [[exon_start, exon_end], ...]
 #		}
 #	}
-#}
-GENOME = {}
-CHROMOSOME = []
-N_REF = 25
-INTEGER = 4 # Byte
+# }
+
+genome = {}
+chromosome = []
+nRed = 25
+integer_size = 4
 
 def get_argument():
 	parser = argparse.ArgumentParser(usage='./hera_build  --fasta FASTA  --gtf GTF  --outdir OUTDIR\n[OPTIONAL]\n\t--full_index 0/1\n\t--grch38 0/1')
@@ -40,7 +41,7 @@ def load_genome(args):
 
 	# Total number of byte need to write/read index
 	# First integer store number of chromosome
-	total = INTEGER
+	total = integer_size
 
 	with open(args.fasta, 'r') as f:
 		name = seq = ''
@@ -50,20 +51,20 @@ def load_genome(args):
 			if line[0] == '>':
 				if name != '':
 					total += len(name)
-					GENOME[name] = {"seq" : seq, "order": order - 1}
+					genome[name] = {"seq" : seq, "order": order - 1}
 					seq = ''
 				name = line[1:-1].split(" ")[0]
-				CHROMOSOME.append(name)
+				chromosome.append(name)
 				order += 1
 			else:
 				seq += line[:-1]
-				if args.grch38 == "1" and order >= N_REF:
+				if args.grch38 == "1" and order >= nRed:
 					break
-		GENOME[name] = {"seq" : seq, "order" : order - 1}
+		genome[name] = {"seq" : seq, "order" : order - 1}
 		
 		# 1 integer for name length
 		# 1 integer for sequence length
-		total += len(name) + 2*INTEGER*order
+		total += len(name) + 2 * integer_size * order
 	return total
 
 # Extract trascriptome information from gtf file
@@ -86,7 +87,7 @@ def extract_transcriptome(args):
 					if k[0] == "gene_id" or k[0] == "gene_name":
 						gene_inf[k[0]] = k[1]
 				try:
-					GENOME[line[0]][gene_inf["gene_id"]] = {"inf": order}
+					genome[line[0]][gene_inf["gene_id"]] = {"inf": order}
 					genes.append(line[6] + gene_inf["gene_id"] + gene_inf["gene_name"])
 					order += 1
 				except:
@@ -98,7 +99,7 @@ def extract_transcriptome(args):
 					if k[0] == "gene_id" or k[0] == "transcript_id":
 						transcript_inf[k[0]] = k[1]
 				try:
-					GENOME[line[0]][transcript_inf["gene_id"]][transcript_inf["transcript_id"]] = [] 
+					genome[line[0]][transcript_inf["gene_id"]][transcript_inf["transcript_id"]] = [] 
 				except:
 					continue
 			elif line[2] == "exon":
@@ -108,7 +109,7 @@ def extract_transcriptome(args):
 					if k[0] == "gene_id" or k[0] == "transcript_id":
 						exon_inf[k[0]] = k[1]
 				try:
-					GENOME[line[0]][exon_inf["gene_id"]][exon_inf["transcript_id"]].append( \
+					genome[line[0]][exon_inf["gene_id"]][exon_inf["transcript_id"]].append( \
 						[int(line[3]) - 1, int(line[4])])
 				except:
 					continue
@@ -123,78 +124,78 @@ def write_index(total_byte, gene_info):
 		os.makedirs(outdir)
 
 	# Store sequence of all transcript
-	f = open(os.path.join(outdir, "transcripts.fasta"), "w")
+	trans_file = open(os.path.join(outdir, "transcripts.fasta"), "w")
 	# Store index for query
-	fi = open(os.path.join(outdir, "reference.inf"), "wb")
+	inf_file = open(os.path.join(outdir, "reference.inf"), "wb")
 
 	# BAM header [name length, name, sequence length]
 	maxNameLen = 0
-	fi.write(struct.pack("II", total_byte, len(CHROMOSOME)))
-	for chr in CHROMOSOME:
+	inf_file.write(struct.pack("II", total_byte, len(chromosome)))
+	for chr in chromosome:
 		maxNameLen = max(maxNameLen, len(chr))
-		fi.write(struct.pack("I", len(chr)))
-		fi.write(chr.encode())
-		fi.write(struct.pack("I", len(GENOME[chr]["seq"])))
+		inf_file.write(struct.pack("I", len(chr)))
+		inf_file.write(chr.encode())
+		inf_file.write(struct.pack("I", len(genome[chr]["seq"])))
 
-	fi.write(struct.pack("II", len(CHROMOSOME), maxNameLen + 1))
+	inf_file.write(struct.pack("II", len(chromosome), maxNameLen + 1))
 
-	for chr in CHROMOSOME:
-		fi.write(chr.encode())
-		fi.write(('\0'*(maxNameLen - len(chr) + 1)).encode())
-	for chr in CHROMOSOME:
-		fi.write(struct.pack("I", len(GENOME[chr]["seq"])))
+	for chr in chromosome:
+		inf_file.write(chr.encode())
+		inf_file.write(('\0'*(maxNameLen - len(chr) + 1)).encode())
+	for chr in chromosome:
+		inf_file.write(struct.pack("I", len(genome[chr]["seq"])))
 
 	# Gene name concated string
 	maxNameLen = 0
 	for gene in gene_info:
 		maxNameLen = max(maxNameLen, len(gene))
 
-	fi.write(struct.pack("II", len(gene_info), maxNameLen + 1))
+	inf_file.write(struct.pack("II", len(gene_info), maxNameLen + 1))
 	for gene in gene_info:
-		fi.write(gene.encode())
-		fi.write(('\0'*(maxNameLen - len(gene) + 1)).encode())
+		inf_file.write(gene.encode())
+		inf_file.write(('\0'*(maxNameLen - len(gene) + 1)).encode())
 
 	# Consecutively write transcript info for each gene
 	# [number of exon, [consecutive exon start], [consecutive exon end]]
-	for chr in GENOME:
-		for gene in GENOME[chr]:
+	for chr in genome:
+		for gene in genome[chr]:
 			if gene == "seq" or gene == "order":
 				continue
-			for transcript in GENOME[chr][gene]:
+			for transcript in genome[chr][gene]:
 				if transcript == "inf":
 					continue
-				f.write(">%s:%s\n" % (transcript, gene))
-				GENOME[chr][gene][transcript] = sorted(GENOME[chr][gene][transcript])
-				fi.write(struct.pack("I", len(GENOME[chr][gene][transcript])))
-				for pos in GENOME[chr][gene][transcript]:
-					fi.write(struct.pack("I", pos[0]))
-					f.write("%s" % (GENOME[chr]["seq"][pos[0]:pos[1]]))
-				for pos in GENOME[chr][gene][transcript]:
-					fi.write(struct.pack("I", pos[1] - 1))
-				f.write("\n")
+				trans_file.write(">%s:%s\n" % (transcript, gene))
+				genome[chr][gene][transcript] = sorted(genome[chr][gene][transcript])
+				inf_file.write(struct.pack("I", len(genome[chr][gene][transcript])))
+				for pos in genome[chr][gene][transcript]:
+					inf_file.write(struct.pack("I", pos[0]))
+					trans_file.write("%s" % (genome[chr]["seq"][pos[0]:pos[1]]))
+				for pos in genome[chr][gene][transcript]:
+					inf_file.write(struct.pack("I", pos[1] - 1))
+				trans_file.write("\n")
 
 	# Write chromosome that a transcript belong to in form of index order
-	for chr in GENOME:
-		for gene in GENOME[chr]:
+	for chr in genome:
+		for gene in genome[chr]:
 			if gene == "seq" or gene == "order":
 				continue
-			for transcript in GENOME[chr][gene]:
+			for transcript in genome[chr][gene]:
 				if transcript == "inf":
 					continue
-				fi.write(struct.pack("I", GENOME[chr]["order"]))
+				inf_file.write(struct.pack("I", genome[chr]["order"]))
 
 	# Write gene that a transcript belong to in form of index order
-	for chr in GENOME:
-		for gene in GENOME[chr]:
+	for chr in genome:
+		for gene in genome[chr]:
 			if gene == "seq" or gene == "order":
 				continue
-			for transcript in GENOME[chr][gene]:
+			for transcript in genome[chr][gene]:
 				if transcript == "inf":                                                     
 					continue
-				fi.write(struct.pack("I", GENOME[chr][gene]["inf"]))
+				inf_file.write(struct.pack("I", genome[chr][gene]["inf"]))
 
-	f.close()
-	fi.close()
+	trans_file.close()
+	inf_file.close()
 
 argument = get_argument()
 args = argument.parse_args()
@@ -222,6 +223,8 @@ write_index(total_byte, gene_info)
 # Call Hera index
 path = sys.argv[0].replace("hera_build", "hera")
 full = args.full_index
+
 if str(full) == "None":
-	full = "0"
-subprocess.call([path , "index", os.path.join(args.outdir, "transcripts.fasta"), args.fasta, os.path.join(args.outdir, "index"), full])
+	subprocess.call([path , "index", "-t", os.path.join(args.outdir, "transcripts.fasta"), "-o", os.path.join(args.outdir, "index")])
+else:
+	subprocess.call([path , "index", "-t", os.path.join(args.outdir, "transcripts.fasta"), "-o", os.path.join(args.outdir, "index"), "-g", args.fasta])

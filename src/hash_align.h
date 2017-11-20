@@ -1,22 +1,6 @@
 #ifndef HASH_ALIGN_H_
 #define HASH_ALIGN_H_
 
-#if defined(USE_JEMALLOC)
-#include "../lib/jemalloc/include/jemalloc/jemalloc.h"
-#define malloc(size) je_malloc(size)
-#define calloc(count,size) je_calloc(count,size)
-#define realloc(ptr,size) je_realloc(ptr,size)
-#define free(ptr) je_free(ptr)
-#endif
-
-#if defined(DEBUG)
-#define DEBUG_PRINT(fmt, args...) fprintf(stdout, fmt, ##args)
-#define ERROR_PRINT(fmt, args...) fprintf(stderr, "DEBUG: %s:%d:%s(): " fmt, __FILE__, __LINE__, __func__,##args)
-#else
-#define DEBUG_PRINT(fmt, args...)
-#define ERROR_PRINT(fmt, args...)
-#endif
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -31,18 +15,17 @@
 #include "bgzf.h"
 #include "kseq.h"
 #include "xxhash.h"
+#include "read.h"
+#include "macros.h"
 
-#define GROUP 10000
 #define FORCE_EXIT true
-#define STACK_SIZE 16777216
+#define THREAD_STACK_SIZE 16777216
 
 #ifndef KSEQ_INIT_READY
 #define KSEQ_INIT_READY
 
 KSEQ_INIT(gzFile, gzread)
 #endif
-
-#define VERSION "hera-v1.1\0"
 
 #define ALPHABET "ACGT"
 #define BLOCK 32
@@ -56,10 +39,6 @@ KSEQ_INIT(gzFile, gzread)
 #define MIL 33554432
 
 #define POP_HEAD(id) ((id << (2 * (BLOCK - KMER + 1))) >> (2 * (BLOCK - KMER)))
-#define MIN3(a, b, c) (a < b? (a < c? a: c): (a < c? b: (c < b? c: b)))
-#define ABS(x) ((int)(x)<0 ? -(x) : (x))
-#define MIN2(a, b) (a < b? a : b)
-#define MAX2(a, b) (a > b? a : b)
 
 /* Cigar operator */
 #define CIGAR "MIDNSHP=XB"
@@ -157,26 +136,21 @@ typedef struct {
 } Gene_map;
 
 typedef struct {
-	unsigned int id;
+	unsigned long id;
 	unsigned int start;
 	unsigned int end;
 } Bucket;
 
 typedef struct {
 	Bucket **bucket;
+	Bucket *sentinel;
 	unsigned int *n;
 	unsigned int *pos;
 	unsigned int *p;
 	unsigned int n_pos;
-} Kmer_hash;
 
-typedef struct {
-	char *name;
-	char *qual;
-	char *seq;
-	unsigned short len;
-	unsigned short name_len;
-} Read_inf;
+	char is_loaded;
+} Kmer_hash;
 
 typedef struct {
 	unsigned int n;
@@ -232,19 +206,9 @@ typedef struct {
 	int count;
 } Fusion_pair;
 
-typedef struct {
-	Read_inf r1[GROUP], r2[GROUP];
-	unsigned int n;
-} Thread_data;
-
-typedef struct {
-	Read_inf r[2*GROUP];
-	unsigned int n;
-} Thread_data2;
-
 extern const unsigned int H;
 extern double MEAN_FRAG, MEAN_LEN;
-extern unsigned int N_READ, NTHREAD, PAIRED, MAPPED, WRITE_BAM, CLASS_MAX, seed;
+extern unsigned int N_READ, PAIRED, MAPPED, WRITE_BAM, CLASS_MAX, seed;
 extern int COMPRESS_LEVEL;
 extern pthread_mutex_t LOCK;
 extern pthread_rwlock_t LOCK_RW;
@@ -254,12 +218,8 @@ extern Ref_inf *REF_INF;
 extern Gene_map *GENE_MAP;
 extern Kmer_hash *KMER_HASH;
 extern Gclass *CLASS;
-extern Fusion *FUSION;
 extern FMindex *FMINDEX;
 extern bamFile BAM;
-extern FILE *SUMMARY;
-extern FILE *OUT_FUSION;
-extern kseq_t *R1, *R2;
 
 /* Initialize */
 void init_hash();
@@ -272,19 +232,19 @@ void destroy_refInf();
 /* Hash align */
 void get_ref_seq(char *file_path);
 void make_class();
-void get_alignment_pair(char *fq1, char *fq2);
-void get_alignment(char *fq);
-void get_position(Read_inf read, Candidate *r, unsigned short str, short space);
+void get_alignment_pair(char *left_file, char *right_file, int32_t nThread);
+void get_alignment_single(char *single_file, int32_t nThread);
+void get_position(struct read_inf *read, Candidate *r, unsigned short str, short space);
 
 /* Genome align */
 void indexGenome(char *input, char *output);
 FMindex *load_FMindex(char *index_file, unsigned int l, char *genome);
 unsigned int query(char *seq, unsigned int len,
 			 FMindex *index, unsigned long *ret);
-void genome_map(Read_inf r1, Read_inf r2, Candidate **r);
+void genome_map(struct read_inf *r1, struct read_inf *r2, Candidate **r);
 
 /* Fusion */
-void fusion_add(Candidate *r, Read_inf read1, Read_inf read2);
+void fusion_add(Candidate *r, struct read_inf *read1, struct read_inf *read2);
 void *assembly_fusion(void *idx);
 
 /* Cigar */

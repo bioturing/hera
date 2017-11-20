@@ -6,6 +6,7 @@
 #include <string.h>
 
 #include "hash_align.h"
+#include "usage.h"
 
 /* Read flag */
 #define MUL 0x1			// Reads have its mate 		
@@ -30,12 +31,11 @@ typedef struct {
 extern unsigned int BUFF_LEN;
 extern char *BAM_BUF;
 
-void init_output(char *idx_dir, char *out_dir, int argc,
-				      char *argv[], char *prefix);
-void bam_write_pair(Read_inf read1, Read_inf read2, Candidate *r,
+void bam_write_pair(struct read_inf *read1, struct read_inf *read2, Candidate *r,
 	unsigned int proper, unsigned int first, unsigned int rev,
 	     unsigned int mrev, char *stream, unsigned int *slen);
-void bam_write_single(Read_inf read, Candidate *r, unsigned int rev,
+void bam_write_single(struct read_inf *read, Candidate *r, unsigned int rev,
 	          unsigned int p, char *stream, unsigned int *slen);
+void init_bam_header(char *idx_dir, int argc, char *argv[]);
 
 #endif
