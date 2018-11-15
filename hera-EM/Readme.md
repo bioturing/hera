@@ -5,6 +5,7 @@ It's important to note that Hera-EM module has not yet been incorporated into pu
 While Hera is licensed under MIT, Hera-EM is not. To use the code, please send email to: info@bioturing.com
 
 To compile code for linux, run sh ./build.sh
+
 Transcriptome fasta for bowtie2 indexing can be download here: https://drive.google.com/file/d/10-weMz3BEShF45LgnAEDO88zfE_GHYck/view?usp=sharing
 
 Running command: Hera-EM alignment.bam n_thread
