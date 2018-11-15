@@ -452,6 +452,4 @@ void squarem(struct model *m0, struct align_batch_t *a, int thread_cnt, int full
 		free(locking - 1);
 	}
 	em_thread_stop();
-	fprintf(stderr, CYAN "[EM] finished running %d round in %lf s\n" RESET,
-			times, end_timing());
 }
