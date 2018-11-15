@@ -56,7 +56,7 @@ void rsp_finish(struct rsp_dis *dis)
 
 	#ifdef RSP_CORRECTION
 	double z = 0;
-	for (int i = 1; i <= RSPD_BUCKET; ++i) {
+	for (i = 1; i <= RSPD_BUCKET; ++i) {
 		z += dis->y[i];
 	}
 	#else

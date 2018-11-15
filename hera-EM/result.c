@@ -1,6 +1,5 @@
 #include "result.h"
-#include "../utils.h"
-#include "../bin.h"
+#include "utils.h"
 
 void calc_eff_length(const struct ref_info_t *t, const struct len_dis *f_dis, double *el)
 {
@@ -92,74 +91,7 @@ void calc_e_count(const struct trans_dis *g_dis, int read_cnt, double *e_count)
 		e_count[i] = g_dis->p[i] * read_cnt;
 }
 
-#if defined(APP_BUILD)
-int print_full_result(const struct result *r)
-{
-	int i, g_iter, cur_gene_id, prev_gene_id;
-	float t_express, g_express, g_count, g_tpm[r->t->nref], temp[r->t->nref];
-	memset(g_tpm, 0, r->t->nref * sizeof(float));
 
-	/* trans count */
-	for (i = 0; i < r->t->nref; ++i)
-		temp[i] = (float)r->e_count[i];
-	__BIN_WRITE(temp, sizeof(float), r->t->nref);
-	/* trans tpm */
-	for (i = 0; i < r->t->nref; ++i)
-		temp[i] = (float)r->tpm[i];
-	__BIN_WRITE(temp, sizeof(float), r->t->nref);
-
-	t_express = g_express = 0.0;
-	g_count = 0.0;
-
-	for (i = g_iter = 0; i < r->t->nref; ++i) {
-		cur_gene_id = r->t->gene[i];
-
-		if (r->e_count[i] > 1)
-			++t_express;
-
-		if (i > 0 && cur_gene_id != prev_gene_id) {
-			if (g_count > 1)
-				++g_express;
-			/* gene count */
-			__BIN_WRITE(&g_count, sizeof(float), 1);
-			g_count = 0;
-			g_iter++;
-		}
-
-		g_tpm[g_iter] += (float)r->tpm[i];
-		g_count += (float)r->e_count[i];
-		prev_gene_id = cur_gene_id;
-	}
-
-	/* gene count */
-	__BIN_WRITE(&g_count, sizeof(float), 1);
-	if (g_count > 1)
-		++g_express;
-
-	/* gene tpm */
-	__BIN_WRITE(g_tpm, sizeof(float), r->t->gene_map->n_gene);
-	/* total trans express */
-	__BIN_WRITE(&t_express, sizeof(float), 1);
-	/* total gene express */
-	__BIN_WRITE(&g_express, sizeof(float), 1);
-
-	return 1;
-}
-
-int print_rounded_tpm(const struct result *r)
-{
-	// FIXME: implement me
-}
-
-void write_abundance(const struct result *r)
-{
-	print_full_result(r);
-
-#ifdef WRITE_ONLY_TPM
-	print_rounded_tmp(r);
-#endif
-}
-#else
 int print_full_result(const struct result *r, const char *filename)
 {
 	FILE *f = xfopen(filename, "w");
@@ -167,30 +99,13 @@ int print_full_result(const struct result *r, const char *filename)
 	if (!f)
 		return 0;
 	
-	int name_length = r->t->gene_map->l_gene_name;
-	int id_length = r->t->gene_map->l_gene_id;
 
-	char *gene_name = calloc(name_length + 1, sizeof(char));
-	char *gene_id = calloc(r->t->gene_map->l_gene_id + 1, sizeof(char));
-
-	fprintf(f, "#trans_id\tstrand\tgene_id\tgene_name\ttrans_length\teffective_len\tread_count\ttpm\tfpkm\n");
+	fprintf(f, "#trans_id\ttrans_length\teffective_len\tread_count\ttpm\tfpkm\n");
 	int i;
 	for (i = 0; i < r->t->nref; i++) {
-		int id = r->t->gene[i];
 
-		char strand = r->t->gene_map->strand[id];
-
-		memcpy(gene_name, r->t->gene_map->gene_name 
-				+ id * name_length, name_length);
-
-		memcpy(gene_id, r->t->gene_map->gene_id 
-				+ id * id_length, id_length);
-
-		fprintf(f, "%s\t%c\t%s\t%s\t%d\t%lf\t%lf\t%lf\t%lf\n",
+		fprintf(f, "%s\t%d\t%lf\t%lf\t%lf\t%lf\n",
 			get_trans_id(r->t, i),
-			strand,
-			gene_id,
-			gene_name,
 			get_trans_len(r->t, i),
 			r->eff_length[i],
 			r->e_count[i],
@@ -198,9 +113,6 @@ int print_full_result(const struct result *r, const char *filename)
 			r->fpkm[i]
 		);
 	}
-
-	free(gene_name);
-	free(gene_id);
 	xfclose(f);
 	
 	return 1;
@@ -241,7 +153,6 @@ void write_abundance(const char *prefix, const struct result *r)
 	free(file_name);
 #endif
 }
-#endif
 
 
 

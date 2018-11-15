@@ -225,8 +225,7 @@ static inline void run_full_step(struct align_batch_t *a, double *prob, struct m
 
 static void *thread_func(void *parameter)
 {
-	struct batch_stream_t *es = parameter;
-	struct align_batch_t a = es_read_batch(es);
+	struct align_batch_t a = *(struct align_batch_t*)parameter;
 	thread_done();
 
 	double *prob = malloc(sizeof(double) * MAX_ALIGNMENT);
@@ -340,11 +339,7 @@ static inline void a_em(int *times)
 #endif
 
 #ifdef PRINT_ROUND
-#if defined(APP_BUILD)
-	fprintf(stderr, "[EM] done %d round\n", *times);
-#else
 	fprintf(stderr, "[EM] done %d round\r", *times);
-#endif
 #endif
 
 	/* save result */
@@ -357,7 +352,7 @@ static inline void a_em(int *times)
 
 pthread_t *em_thread;
 
-void em_thread_init(struct batch_stream_t *es)
+void em_thread_init(struct align_batch_t *es)
 {
 	em_thread = malloc(sizeof(pthread_t) * m_param.thread_running);
 
@@ -430,11 +425,9 @@ int s_squarem(struct s_model *m1, int *times, int m_loop)
 	return m_loop!= 0;
 };
 
-void squarem(struct model *m0, struct batch_stream_t *a, int thread_cnt, int full_loop)
+void squarem(struct model *m0, struct align_batch_t *a, int thread_cnt, int full_loop)
 {
-#if !defined(APP_BUILD)
 	start_timing();
-#endif
 
 	m_param.thread_running = thread_cnt;
 	model_global_init();
@@ -442,16 +435,11 @@ void squarem(struct model *m0, struct batch_stream_t *a, int thread_cnt, int ful
 	int times = 0;
 	em_thread_init(a);
 
-#if defined(APP_BUILD)
-	fprintf(stderr, "[EM] start running\n");
-#else
 	fprintf(stderr, CYAN "[EM] start running\n" RESET);
-#endif
 
 	if (!f_squarem(m0, &times, full_loop)) {
-#if !defined(APP_BUILD)
 		fprintf(stderr, GREEN "[EM] running simplified model\n" RESET);
-#endif
+
 		/*if not converged do simplified model em */
 		struct s_model sm0;
 		m_param.last_full_m = m0;
@@ -464,8 +452,6 @@ void squarem(struct model *m0, struct batch_stream_t *a, int thread_cnt, int ful
 		free(locking - 1);
 	}
 	em_thread_stop();
-#if !defined(APP_BUILD)
 	fprintf(stderr, CYAN "[EM] finished running %d round in %lf s\n" RESET,
 			times, end_timing());
-#endif
 }

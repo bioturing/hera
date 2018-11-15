@@ -23,15 +23,9 @@ void calc_fpkm(const struct trans_dis *g_dis, const double *el, double *fpkm);
 
 void calc_e_count(const struct trans_dis *g_dis, int read_cnt, double *e_count);
 
-#if defined(APP_BUILD)
-int print_full_result(const struct result *r);
-int print_rounded_tpm(const struct result *r);
-void write_abundance(const struct result *r);
-#else
 int print_full_result(const struct result *r, const char *filename);
 int print_rounded_tpm(const struct result *r, const char *filename);
 void write_abundance(const char *prefix, const struct result *r);
-#endif
 
 
 void result_release(const struct result *r);

@@ -9,7 +9,7 @@
 #include "utility.h"
 #include "result.h"
 #include "transcript.h"
-#include "../binary_write.h"
+#include "align.h"
 
 #include <math.h>
 

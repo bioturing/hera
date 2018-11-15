@@ -7,6 +7,6 @@
 #include "result.h"
 #include <stdio.h>
 
-void squarem(struct model *m, struct batch_stream_t *a, int thread_cnt, int full_loop);
+void squarem(struct model *m, struct align_batch_t *a, int thread_cnt, int full_loop);
 
 #endif

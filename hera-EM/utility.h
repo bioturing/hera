@@ -5,8 +5,7 @@
 #include <stdio.h>
 #include <assert.h>
 #include <math.h>
-
-#include "../utils.h"
+#include "utils.h"
 
 #define THRESHOLD1 1e-3
 #define THRESHOLD2 1e-7
@@ -51,11 +50,11 @@
 
 #define MAX_ALIGNMENT 1000
 
-#define USE_RSPD //1s
-#define USE_FRAG // 0.5s
-#define USE_MIS //0.3-0.4s
-#define USE_ORI //not significant <0.05
-#define USE_NOISE 1 //not use noise
+#define USE_RSPD
+#define USE_FRAG
+#define USE_MIS
+#define USE_ORI
+#define USE_NOISE 1 //1 = using noise, 0 = not using noise
 
 //#define ANALYSIS
 
@@ -169,4 +168,6 @@ const struct diff_info arr_diff(const double *a1, const double *a2, int n,
 				double threshold1, double threshold2);
 
 void print_diff(const struct diff_info info);
+
+
 #endif
