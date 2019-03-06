@@ -100,7 +100,7 @@ UNAME=`uname`
 Makefile_mac="Makefile_mac"
 Makefile_linux="Makefile_linux"
 
-if [ $UNAME == "Darwin" ]
+if [ "$UNAME" == "Darwin" ]
 then
 	echo "Mac"
 	make -f $Makefile_mac
